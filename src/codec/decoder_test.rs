@@ -299,7 +299,7 @@ fn test_offset_start() {
             assert!(!p.retain);
             assert_eq!(p.qospid, QosPid::AtMostOnce);
             assert_eq!(p.topic_name, "a/b");
-            assert_eq!(core::str::from_utf8(p.payload).unwrap(), "hello");
+            assert_eq!(core::str::from_utf8(&p.payload).unwrap(), "hello");
         }
         other => panic!("Failed decode: {:?}", other),
     }
@@ -331,7 +331,7 @@ fn test_publish() {
             assert!(!p.retain);
             assert_eq!(p.qospid, QosPid::AtMostOnce);
             assert_eq!(p.topic_name, "a/b");
-            assert_eq!(core::str::from_utf8(p.payload).unwrap(), "hello");
+            assert_eq!(core::str::from_utf8(&p.payload).unwrap(), "hello");
         }
         other => panic!("Failed decode: {:?}", other),
     }
@@ -345,7 +345,7 @@ fn test_publish() {
             assert!(!p.retain);
             assert_eq!(p.qospid, QosPid::AtMostOnce);
             assert_eq!(p.topic_name, "a/b");
-            assert_eq!(core::str::from_utf8(p.payload).unwrap(), "hello");
+            assert_eq!(core::str::from_utf8(&p.payload).unwrap(), "hello");
         }
         other => panic!("Failed decode: {:?}", other),
     }
@@ -360,7 +360,7 @@ fn test_publish() {
             assert!(p.retain);
             assert_eq!(p.qospid, QosPid::from_u8u16(2, 10));
             assert_eq!(p.topic_name, "a/b");
-            assert_eq!(core::str::from_utf8(p.payload).unwrap(), "hello");
+            assert_eq!(core::str::from_utf8(&p.payload).unwrap(), "hello");
         }
         other => panic!("Failed decode: {:?}", other),
     }

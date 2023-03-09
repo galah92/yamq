@@ -76,8 +76,8 @@ fn test_publish() {
         dup: false,
         qospid: QosPid::from_u8u16(2, 10),
         retain: true,
-        topic_name: "asdf",
-        payload: &[b'h', b'e', b'l', b'l', b'o'],
+        topic_name: std::borrow::Cow::from("asdf"),
+        payload: std::borrow::Cow::from(&[b'h', b'e', b'l', b'l', b'o'][..]),
     }
     .into();
     // assert_decode!(Packet::Publish(_), &packet);

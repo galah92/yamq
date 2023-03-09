@@ -8,8 +8,8 @@ pub struct Publish<'a> {
     pub dup: bool,
     pub qospid: QosPid,
     pub retain: bool,
-    pub topic_name: &'a str,
-    pub payload: &'a [u8],
+    pub topic_name: std::borrow::Cow<'a, str>,
+    pub payload: std::borrow::Cow<'a, [u8]>,
 }
 
 impl<'a> Publish<'a> {
@@ -37,8 +37,8 @@ impl<'a> Publish<'a> {
             dup: header.dup,
             qospid,
             retain: header.retain,
-            topic_name,
-            payload,
+            topic_name: std::borrow::Cow::from(topic_name),
+            payload: std::borrow::Cow::from(payload),
         })
     }
     pub(crate) fn to_buffer(&self, buf: &mut [u8], offset: &mut usize) -> Result<usize, Error> {
@@ -68,7 +68,7 @@ impl<'a> Publish<'a> {
         let write_len = write_length(buf, offset, length)? + 1;
 
         // Topic
-        write_string(buf, offset, self.topic_name)?;
+        write_string(buf, offset, &self.topic_name)?;
 
         // Pid
         match self.qospid {
@@ -78,10 +78,20 @@ impl<'a> Publish<'a> {
         }
 
         // Payload
-        for &byte in self.payload {
+        for &byte in self.payload.as_ref() {
             write_u8(buf, offset, byte)?;
         }
 
         Ok(write_len)
+    }
+
+    pub fn to_owned(&self) -> Publish<'static> {
+        Publish {
+            dup: self.dup,
+            qospid: self.qospid,
+            retain: self.retain,
+            topic_name: std::borrow::Cow::from(self.topic_name.to_string()),
+            payload: std::borrow::Cow::from(self.payload.to_vec()),
+        }
     }
 }

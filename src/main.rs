@@ -34,13 +34,21 @@ impl Broker {
 
     pub async fn run(&mut self) {
         loop {
-            let (socket, _) = self.listener.accept().await.unwrap();
-            let (client_tx, client_rx) = tokio::sync::mpsc::channel(32);
-            self.clients_tx.push(client_tx.clone());
-            let mut client = Client::new(socket, self.broker_tx.clone(), client_rx);
-            tokio::spawn(async move {
-                client.run().await;
-            });
+            tokio::select! {
+                result = self.listener.accept() => {
+                    let (socket, _) = result.unwrap();
+                    let (client_tx, client_rx) = tokio::sync::mpsc::channel(32);
+                    self.clients_tx.push(client_tx.clone());
+                    let mut client = Client::new(socket, self.broker_tx.clone(), client_rx);
+                    tokio::spawn(async move {
+                        client.run().await;
+                    });
+                }
+                packet = self.broker_rx.recv() => {
+                    println!("Broker received packet: {:?}", packet);
+                    // TODO: send packets to all clients
+                }
+            }
         }
     }
 }
@@ -120,6 +128,8 @@ impl Client {
                 return None;
             }
             Packet::Publish(publish) => {
+                let packet = Packet::Publish(publish.to_owned());
+                self.broker_tx.send(packet).await.unwrap();
                 let qospid = publish.qospid;
                 match qospid.qos() {
                     codec::QoS::AtMostOnce => (),
