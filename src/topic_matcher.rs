@@ -1,4 +1,4 @@
-pub fn is_match(topic_filter: &str, topic_name: &str) -> bool {
+pub fn matches(topic_filter: &str, topic_name: &str) -> bool {
     let mut topic_itr = topic_name.split('/');
     let mut filter_itr = topic_filter.split('/');
 
@@ -54,19 +54,19 @@ mod tests {
 
     #[test]
     fn topic_filter_matcher() {
-        assert!(is_match("sport/#", "sport"));
+        assert!(matches("sport/#", "sport"));
 
-        assert!(is_match("#", "sport"));
-        assert!(is_match("#", "/"));
-        assert!(is_match("#", "abc/def"));
-        assert!(!is_match("#", "$SYS"));
-        assert!(!is_match("#", "$SYS/abc"));
+        assert!(matches("#", "sport"));
+        assert!(matches("#", "/"));
+        assert!(matches("#", "abc/def"));
+        assert!(!matches("#", "$SYS"));
+        assert!(!matches("#", "$SYS/abc"));
 
-        assert!(!is_match("+/monitor/Clients", "$SYS/monitor/Clients"));
+        assert!(!matches("+/monitor/Clients", "$SYS/monitor/Clients"));
 
-        assert!(is_match("$SYS/#", "$SYS/monitor/Clients"));
-        assert!(is_match("$SYS/#", "$SYS"));
+        assert!(matches("$SYS/#", "$SYS/monitor/Clients"));
+        assert!(matches("$SYS/#", "$SYS"));
 
-        assert!(is_match("$SYS/monitor/+", "$SYS/monitor/Clients"));
+        assert!(matches("$SYS/monitor/+", "$SYS/monitor/Clients"));
     }
 }

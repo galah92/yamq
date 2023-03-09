@@ -14,21 +14,21 @@ async fn main() {
 
 struct Broker {
     listener: TcpListener,
-    broker_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
-    broker_rx: tokio::sync::mpsc::Receiver<Packet<'static>>,
-    clients_tx: Vec<tokio::sync::mpsc::Sender<Packet<'static>>>,
+    broker_tx: tokio::sync::broadcast::Sender<Packet<'static>>,
+    client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
+    client_rx: tokio::sync::mpsc::Receiver<Packet<'static>>,
 }
 
 impl Broker {
     pub async fn new() -> Self {
         let listener = TcpListener::bind("127.0.0.1:1883").await.unwrap();
-        let (broker_tx, broker_rx) = tokio::sync::mpsc::channel(32);
-        let clients_tx = Vec::new();
+        let (broker_tx, _) = tokio::sync::broadcast::channel(32);
+        let (client_tx, client_rx) = tokio::sync::mpsc::channel(32);
         Self {
             listener,
             broker_tx,
-            broker_rx,
-            clients_tx,
+            client_tx,
+            client_rx,
         }
     }
 
@@ -37,16 +37,14 @@ impl Broker {
             tokio::select! {
                 result = self.listener.accept() => {
                     let (socket, _) = result.unwrap();
-                    let (client_tx, client_rx) = tokio::sync::mpsc::channel(32);
-                    self.clients_tx.push(client_tx.clone());
-                    let mut client = Client::new(socket, self.broker_tx.clone(), client_rx);
+                    let mut client = Client::new(socket, self.client_tx.clone(), self.broker_tx.subscribe());
                     tokio::spawn(async move {
                         client.run().await;
                     });
                 }
-                packet = self.broker_rx.recv() => {
+                packet = self.client_rx.recv() => {
                     println!("Broker received packet: {:?}", packet);
-                    // TODO: send packets to all clients
+                    self.broker_tx.send(packet.unwrap()).unwrap();
                 }
             }
         }
@@ -55,22 +53,22 @@ impl Broker {
 
 struct Client {
     socket: TcpStream,
-    broker_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
-    client_rx: tokio::sync::mpsc::Receiver<Packet<'static>>,
+    client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
+    broker_rx: tokio::sync::broadcast::Receiver<Packet<'static>>,
     subscriptions: Vec<SubscribeTopic>,
 }
 
 impl Client {
     pub fn new(
         socket: TcpStream,
-        broker_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
-        client_rx: tokio::sync::mpsc::Receiver<Packet<'static>>,
+        client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
+        broker_rx: tokio::sync::broadcast::Receiver<Packet<'static>>,
     ) -> Self {
         let subscriptions = Vec::new();
         Self {
             socket,
-            broker_tx,
-            client_rx,
+            broker_rx,
+            client_tx,
             subscriptions,
         }
     }
@@ -81,8 +79,15 @@ impl Client {
 
         loop {
             tokio::select! {
-                Some(packet) = self.client_rx.recv() => {
-                    // TODO: we should only support Publish packets and filter according to subscriptions
+                packet = self.broker_rx.recv() => {
+                    let packet = packet.unwrap();
+                    if let Packet::Publish(publish) = &packet {
+                        let matched = self.subscriptions.iter().any(|topic| topic_matcher::matches(&topic.topic_path, &publish.topic_name));
+                        if !matched {
+                            continue;
+                        }
+                    }
+                    println!("Sending packet to subscriber");
                     send_packet(&mut self.socket, &packet).await;
                 }
                 n = self.socket.read_buf(&mut buffer) => {
@@ -129,7 +134,7 @@ impl Client {
             }
             Packet::Publish(publish) => {
                 let packet = Packet::Publish(publish.to_owned());
-                self.broker_tx.send(packet).await.unwrap();
+                self.client_tx.send(packet).await.unwrap();
                 let qospid = publish.qospid;
                 match qospid.qos() {
                     codec::QoS::AtMostOnce => (),
@@ -174,9 +179,7 @@ impl Client {
                 let unsuback = Packet::Unsuback(pid);
                 send_packet(&mut self.socket, &unsuback).await;
             }
-            _ => {
-                panic!("SHOULD NOT HAPPEN");
-            }
+            _ => panic!("SHOULD NOT HAPPEN"),
         }
         Some(())
     }

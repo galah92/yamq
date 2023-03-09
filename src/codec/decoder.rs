@@ -1,5 +1,24 @@
 use super::*;
 
+pub fn clone_packet(input: &[u8], output: &mut [u8]) -> Result<usize, Error> {
+    if input.is_empty() {
+        return Ok(0);
+    }
+
+    let mut offset = 0;
+
+    let start = offset;
+    if let Some((_, remaining_len)) = read_header(input, &mut offset)? {
+        let end = offset + remaining_len;
+        let len = end - start;
+        output[..len].copy_from_slice(&input[start..end]);
+        Ok(len)
+    } else {
+        // Don't have a full packet
+        Ok(0)
+    }
+}
+
 /// Decode bytes from a [BytesMut] buffer as a [Packet] enum.
 ///
 /// The buf is never actually written to, it only takes a `BytesMut` instead of a `Bytes` to
