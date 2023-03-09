@@ -1,7 +1,8 @@
+mod codec;
 mod topic_matcher;
 
 use bytes::{Buf, BytesMut};
-use mqttrs::{decode_slice, encode_slice, Packet, SubscribeTopic};
+use codec::{decode_slice, encode_slice, Packet, SubscribeTopic};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -105,11 +106,11 @@ impl Client {
             Packet::Connect(connect) => {
                 let accepted = connect.username == Some("user");
                 let code = if accepted {
-                    mqttrs::ConnectReturnCode::Accepted
+                    codec::ConnectReturnCode::Accepted
                 } else {
-                    mqttrs::ConnectReturnCode::BadUsernamePassword
+                    codec::ConnectReturnCode::BadUsernamePassword
                 };
-                let connack = Packet::Connack(mqttrs::Connack {
+                let connack = Packet::Connack(codec::Connack {
                     session_present: false, // TODO: support clean session
                     code,
                 });
@@ -121,13 +122,13 @@ impl Client {
             Packet::Publish(publish) => {
                 let qospid = publish.qospid;
                 match qospid.qos() {
-                    mqttrs::QoS::AtMostOnce => (),
-                    mqttrs::QoS::AtLeastOnce => {
+                    codec::QoS::AtMostOnce => (),
+                    codec::QoS::AtLeastOnce => {
                         let pid = qospid.pid().unwrap();
                         let puback = Packet::Puback(pid);
                         send_packet(&mut self.socket, &puback).await;
                     }
-                    mqttrs::QoS::ExactlyOnce => {
+                    codec::QoS::ExactlyOnce => {
                         let pid = qospid.pid().unwrap();
                         let pubrec = Packet::Pubrec(pid);
                         send_packet(&mut self.socket, &pubrec).await;
@@ -149,9 +150,9 @@ impl Client {
                 println!("{:?}", self.subscriptions);
                 let return_codes = topics
                     .iter()
-                    .map(|topic| mqttrs::SubscribeReturnCodes::Success(topic.qos))
+                    .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
                     .collect();
-                let suback = Packet::Suback(mqttrs::Suback { pid, return_codes });
+                let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 send_packet(&mut self.socket, &suback).await;
             }
             Packet::Unsubscribe(unsubscribe) => {
