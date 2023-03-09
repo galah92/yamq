@@ -238,10 +238,7 @@ fn test_connect() {
         password: Some(b"mq"),
     };
 
-    let packet_buf = &mut [0u8; 64];
-    assert_eq!(clone_packet(data, &mut packet_buf[..]).unwrap(), 41);
-    assert_eq!(Ok(Some(pkt.into())), decode_slice(packet_buf));
-    // assert_eq!(data.len(), 0);
+    assert_eq!(Ok(Some(pkt.into())), decode_slice(data));
 }
 
 #[test]
@@ -289,11 +286,8 @@ fn test_offset_start() {
         0b00111101, 12, 0x00, 0x03, b'a', b'/', b'b', 0, 10, b'h', b'e', b'l', b'l', b'o',
     ];
 
-    let packet_buf = &mut [0u8; 64];
-    assert_eq!(clone_packet(data, &mut packet_buf[..]).unwrap(), 12);
-    assert_eq!(data.len(), 29);
 
-    match decode_slice(packet_buf) {
+    match decode_slice(data) {
         Ok(Some(Packet::Publish(p))) => {
             assert!(!p.dup);
             assert!(!p.retain);
@@ -321,11 +315,7 @@ fn test_publish() {
     );
     assert_eq!(data.len(), 38);
 
-    let packet_buf = &mut [0u8; 64];
-    assert_eq!(clone_packet(data, &mut packet_buf[..]).unwrap(), 12);
-    // assert_eq!(data.len(), 26);
-
-    match decode_slice(packet_buf) {
+    match decode_slice(data) {
         Ok(Some(Packet::Publish(p))) => {
             assert!(!p.dup);
             assert!(!p.retain);
@@ -336,10 +326,7 @@ fn test_publish() {
         other => panic!("Failed decode: {:?}", other),
     }
 
-    let packet_buf2 = &mut [0u8; 64];
-    assert_eq!(clone_packet(data, &mut packet_buf2[..]).unwrap(), 12);
-    // assert_eq!(data.len(), 14);
-    match decode_slice(packet_buf2) {
+    match decode_slice(data) {
         Ok(Some(Packet::Publish(p))) => {
             assert!(p.dup);
             assert!(!p.retain);
@@ -350,11 +337,7 @@ fn test_publish() {
         other => panic!("Failed decode: {:?}", other),
     }
 
-    let packet_buf3 = &mut [0u8; 64];
-    assert_eq!(clone_packet(data, &mut packet_buf3[..]).unwrap(), 14);
-    // assert_eq!(data.len(), 0);
-
-    match decode_slice(packet_buf3) {
+    match decode_slice(data) {
         Ok(Some(Packet::Publish(p))) => {
             assert!(p.dup);
             assert!(p.retain);

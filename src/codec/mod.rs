@@ -67,7 +67,7 @@ mod encoder_test;
 
 pub use {
     connect::{Connack, Connect, ConnectReturnCode, LastWill, Protocol},
-    decoder::{clone_packet, decode_slice, decode_slice_with_len},
+    decoder::{decode_slice, decode_slice_with_len},
     encoder::encode_slice,
     packet::{Packet, PacketType},
     publish::Publish,
