@@ -43,7 +43,6 @@ impl Broker {
                     });
                 }
                 packet = self.client_rx.recv() => {
-                    println!("Broker received packet: {:?}", packet);
                     self.broker_tx.send(packet.unwrap()).unwrap();
                 }
             }
@@ -114,7 +113,6 @@ impl Client {
                             continue;
                         }
                     }
-                    println!("Sending packet to subscriber");
                     self.send_packet(&packet).await;
                 }
                 n = self.socket.read_buf(&mut buffer) => {
@@ -123,17 +121,17 @@ impl Client {
                         Ok(packet) => packet,
                         Err(e) => {
                             println!("{:?}", e);
-                            break;
+                            return;
                         }
                     };
                     let packet = match packet {
                         Some(packet) => packet,
-                        None => break,
+                        None => return,
                     };
-                    println!("Received packet: {:?}", packet);
+                    println!("{:?}", packet);
                     match self.handle_packet(&packet).await {
                         Some(()) => (),
-                        None => break,
+                        None => return,
                     }
                     buffer.advance(n.unwrap());
                 }
