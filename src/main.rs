@@ -1,10 +1,11 @@
 mod codec;
-mod topic_matcher;
+mod topic;
 
 use bytes::{Buf, BytesMut};
-use codec::{decode_slice, encode_slice, Packet, SubscribeTopic};
+use codec::{decode_slice, encode_slice, Packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use topic::TopicMatcher;
 
 #[tokio::main]
 async fn main() {
@@ -17,6 +18,7 @@ struct Broker {
     broker_tx: tokio::sync::broadcast::Sender<Packet<'static>>,
     client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
     client_rx: tokio::sync::mpsc::Receiver<Packet<'static>>,
+    subscribers: TopicMatcher<tokio::sync::mpsc::Sender<Packet<'static>>>,
 }
 
 impl Broker {
@@ -24,11 +26,13 @@ impl Broker {
         let listener = TcpListener::bind("127.0.0.1:1883").await.unwrap();
         let (broker_tx, _) = tokio::sync::broadcast::channel(32);
         let (client_tx, client_rx) = tokio::sync::mpsc::channel(32);
+        let subscribers = TopicMatcher::new();
         Self {
             listener,
             broker_tx,
             client_tx,
             client_rx,
+            subscribers,
         }
     }
 
@@ -43,7 +47,26 @@ impl Broker {
                     });
                 }
                 packet = self.client_rx.recv() => {
-                    self.broker_tx.send(packet.unwrap()).unwrap();
+                    match &packet {
+                        Some(Packet::Subscribe(subscribe)) => {
+                            for topic in &subscribe.topics {
+                                self.subscribers.insert(topic.topic_path.clone(), self.client_tx.clone());
+                            }
+                        }
+                        Some(Packet::Unsubscribe(unsubscribe)) => {
+                            for topic in &unsubscribe.topics {
+                                self.subscribers.remove(topic);
+                            }
+                        }
+                        Some(Packet::Publish(publish)) => {
+                            let subscribers = self.subscribers.matches(&publish.topic_name);
+                            for (_, subscriber) in subscribers {
+                                let packet = packet.clone().unwrap();
+                                subscriber.send(packet).await.unwrap();
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
@@ -54,7 +77,6 @@ struct Client {
     socket: TcpStream,
     client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
     broker_rx: tokio::sync::broadcast::Receiver<Packet<'static>>,
-    subscriptions: Vec<SubscribeTopic>,
 }
 
 impl Client {
@@ -63,12 +85,10 @@ impl Client {
         client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
         broker_rx: tokio::sync::broadcast::Receiver<Packet<'static>>,
     ) -> Self {
-        let subscriptions = Vec::new();
         Self {
             socket,
             broker_rx,
             client_tx,
-            subscriptions,
         }
     }
 
@@ -107,12 +127,6 @@ impl Client {
             tokio::select! {
                 packet = self.broker_rx.recv() => {
                     let packet = packet.unwrap();
-                    if let Packet::Publish(publish) = &packet {
-                        let matched = self.subscriptions.iter().any(|topic| topic_matcher::matches(&topic.topic_path, &publish.topic_name));
-                        if !matched {
-                            continue;
-                        }
-                    }
                     self.send_packet(&packet).await;
                 }
                 n = self.socket.read_buf(&mut buffer) => {
@@ -159,6 +173,7 @@ impl Client {
                     }
                 }
                 if !publish.dup {
+                    // Send to broker
                     let packet = Packet::Publish(publish.to_owned());
                     self.client_tx.send(packet).await.unwrap();
                 }
@@ -166,21 +181,25 @@ impl Client {
             Packet::Subscribe(subscribe) => {
                 let pid = subscribe.pid;
                 let topics = &subscribe.topics;
-                self.subscriptions.extend_from_slice(topics);
                 let return_codes = topics
                     .iter()
                     .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
                     .collect();
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 self.send_packet(&suback).await;
+
+                // Send to broker
+                let packet = Packet::Subscribe(subscribe.to_owned());
+                self.client_tx.send(packet).await.unwrap();
             }
             Packet::Unsubscribe(unsubscribe) => {
                 let pid = unsubscribe.pid;
-                let topics = &unsubscribe.topics;
-                self.subscriptions
-                    .retain(|topic| !topics.contains(&topic.topic_path));
                 let unsuback = Packet::Unsuback(pid);
                 self.send_packet(&unsuback).await;
+
+                // Send to broker
+                let packet = Packet::Unsubscribe(unsubscribe.to_owned());
+                self.client_tx.send(packet).await.unwrap();
             }
             _ => {
                 // We do not support other incoming packets, disconnect the client
