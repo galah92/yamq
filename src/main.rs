@@ -133,10 +133,6 @@ impl Client {
                 return None;
             }
             Packet::Publish(publish) => {
-                if !publish.dup {
-                    let packet = Packet::Publish(publish.to_owned());
-                    self.client_tx.send(packet).await.unwrap();
-                }
                 let qospid = publish.qospid;
                 match qospid.qos() {
                     codec::QoS::AtMostOnce => (),
@@ -146,19 +142,14 @@ impl Client {
                         self.send_packet(&puback).await;
                     }
                     codec::QoS::ExactlyOnce => {
-                        let pid = qospid.pid().unwrap();
-                        let pubrec = Packet::Pubrec(pid);
-                        self.send_packet(&pubrec).await;
+                        // We do not support QoS 2, disconnect the client
+                        return None;
                     }
                 }
-            }
-            Packet::Pubrel(pid) => {
-                let pubcomp = Packet::Pubcomp(*pid);
-                self.send_packet(&pubcomp).await;
-            }
-            Packet::Pingreq => {
-                let pingresp = Packet::Pingresp;
-                self.send_packet(&pingresp).await;
+                if !publish.dup {
+                    let packet = Packet::Publish(publish.to_owned());
+                    self.client_tx.send(packet).await.unwrap();
+                }
             }
             Packet::Subscribe(subscribe) => {
                 let pid = subscribe.pid;
@@ -181,7 +172,10 @@ impl Client {
                 let unsuback = Packet::Unsuback(pid);
                 self.send_packet(&unsuback).await;
             }
-            _ => panic!("SHOULD NOT HAPPEN"),
+            _ => {
+                // We do not support other incoming packets, disconnect the client
+                return None;
+            }
         }
         Some(())
     }
