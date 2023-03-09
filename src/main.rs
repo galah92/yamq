@@ -77,6 +77,33 @@ impl Client {
         const MAX_PACKET_SIZE: usize = std::mem::size_of::<Packet>();
         let mut buffer = BytesMut::with_capacity(MAX_PACKET_SIZE);
 
+        let n = self.socket.read_buf(&mut buffer).await;
+        let packet = decode_slice(&buffer);
+        let packet = match packet {
+            Ok(packet) => packet,
+            Err(e) => {
+                println!("{:?}", e);
+                return;
+            }
+        };
+        if let Some(Packet::Connect(connect)) = &packet {
+            let accepted = connect.username == Some("user");
+            let code = if accepted {
+                codec::ConnectReturnCode::Accepted
+            } else {
+                codec::ConnectReturnCode::BadUsernamePassword
+            };
+            let connack = Packet::Connack(codec::Connack {
+                session_present: false, // TODO: support clean session
+                code,
+            });
+            self.send_packet(&connack).await;
+        } else {
+            // This is not a connect packet, disconnect the client
+            return;
+        }
+        buffer.advance(n.unwrap());
+
         loop {
             tokio::select! {
                 packet = self.broker_rx.recv() => {
@@ -116,19 +143,6 @@ impl Client {
 
     async fn handle_packet(&mut self, packet: &Packet<'_>) -> Option<()> {
         match packet {
-            Packet::Connect(connect) => {
-                let accepted = connect.username == Some("user");
-                let code = if accepted {
-                    codec::ConnectReturnCode::Accepted
-                } else {
-                    codec::ConnectReturnCode::BadUsernamePassword
-                };
-                let connack = Packet::Connack(codec::Connack {
-                    session_present: false, // TODO: support clean session
-                    code,
-                });
-                self.send_packet(&connack).await;
-            }
             Packet::Disconnect => {
                 return None;
             }
@@ -155,7 +169,6 @@ impl Client {
                 let pid = subscribe.pid;
                 let topics = &subscribe.topics;
                 self.subscriptions.extend_from_slice(topics);
-                println!("{:?}", self.subscriptions);
                 let return_codes = topics
                     .iter()
                     .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
@@ -168,7 +181,6 @@ impl Client {
                 let topics = &unsubscribe.topics;
                 self.subscriptions
                     .retain(|topic| !topics.contains(&topic.topic_path));
-                println!("{:?}", self.subscriptions);
                 let unsuback = Packet::Unsuback(pid);
                 self.send_packet(&unsuback).await;
             }
