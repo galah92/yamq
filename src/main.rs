@@ -88,7 +88,7 @@ impl Client {
                         }
                     }
                     println!("Sending packet to subscriber");
-                    send_packet(&mut self.socket, &packet).await;
+                    self.send_packet(&packet).await;
                 }
                 n = self.socket.read_buf(&mut buffer) => {
                     let packet = decode_slice(&buffer);
@@ -127,36 +127,38 @@ impl Client {
                     session_present: false, // TODO: support clean session
                     code,
                 });
-                send_packet(&mut self.socket, &connack).await;
+                self.send_packet(&connack).await;
             }
             Packet::Disconnect => {
                 return None;
             }
             Packet::Publish(publish) => {
-                let packet = Packet::Publish(publish.to_owned());
-                self.client_tx.send(packet).await.unwrap();
+                if !publish.dup {
+                    let packet = Packet::Publish(publish.to_owned());
+                    self.client_tx.send(packet).await.unwrap();
+                }
                 let qospid = publish.qospid;
                 match qospid.qos() {
                     codec::QoS::AtMostOnce => (),
                     codec::QoS::AtLeastOnce => {
                         let pid = qospid.pid().unwrap();
                         let puback = Packet::Puback(pid);
-                        send_packet(&mut self.socket, &puback).await;
+                        self.send_packet(&puback).await;
                     }
                     codec::QoS::ExactlyOnce => {
                         let pid = qospid.pid().unwrap();
                         let pubrec = Packet::Pubrec(pid);
-                        send_packet(&mut self.socket, &pubrec).await;
+                        self.send_packet(&pubrec).await;
                     }
                 }
             }
             Packet::Pubrel(pid) => {
                 let pubcomp = Packet::Pubcomp(*pid);
-                send_packet(&mut self.socket, &pubcomp).await;
+                self.send_packet(&pubcomp).await;
             }
             Packet::Pingreq => {
                 let pingresp = Packet::Pingresp;
-                send_packet(&mut self.socket, &pingresp).await;
+                self.send_packet(&pingresp).await;
             }
             Packet::Subscribe(subscribe) => {
                 let pid = subscribe.pid;
@@ -168,7 +170,7 @@ impl Client {
                     .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
                     .collect();
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
-                send_packet(&mut self.socket, &suback).await;
+                self.send_packet(&suback).await;
             }
             Packet::Unsubscribe(unsubscribe) => {
                 let pid = unsubscribe.pid;
@@ -177,16 +179,16 @@ impl Client {
                     .retain(|topic| !topics.contains(&topic.topic_path));
                 println!("{:?}", self.subscriptions);
                 let unsuback = Packet::Unsuback(pid);
-                send_packet(&mut self.socket, &unsuback).await;
+                self.send_packet(&unsuback).await;
             }
             _ => panic!("SHOULD NOT HAPPEN"),
         }
         Some(())
     }
-}
 
-async fn send_packet(socket: &mut TcpStream, packet: &Packet<'_>) {
-    let mut encoded = [0u8; 1024];
-    let len = encode_slice(packet, &mut encoded).unwrap();
-    socket.write_all(&encoded[..len]).await.unwrap();
+    async fn send_packet(&mut self, packet: &Packet<'_>) {
+        let mut encoded = [0u8; 1024];
+        let len = encode_slice(packet, &mut encoded).unwrap();
+        self.socket.write_all(&encoded[..len]).await.unwrap();
+    }
 }
