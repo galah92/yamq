@@ -140,24 +140,20 @@ impl Connection {
                 return;
             }
         };
-        if let Some(Packet::Connect(connect)) = &packet {
-            let accepted = connect.username == Some("user");
-            let code = if accepted {
-                codec::ConnectReturnCode::Accepted
-            } else {
-                codec::ConnectReturnCode::BadUsernamePassword
-            };
+        if let Some(Packet::Connect(_connect)) = &packet {
             let connack = Packet::Connack(codec::Connack {
                 session_present: false, // TODO: support clean session
-                code,
+                code: codec::ConnectReturnCode::Accepted,
             });
             self.send_packet(&connack).await;
         } else {
             // This is not a connect packet, disconnect the client
             return;
         }
+
         buffer.advance(n.unwrap());
 
+        let mut cursor = 0;
         loop {
             tokio::select! {
                 Some(
@@ -167,24 +163,35 @@ impl Connection {
                     self.send_packet(&packet).await;
                 }
                 n = self.socket.read_buf(&mut buffer) => {
+                    if n.is_err() {
+                        println!("Error reading from socket");
+                        return;
+                    }
+                    let n = n.unwrap();
+                    if n == 0 {
+                        // The socket has been closed
+                        return;
+                    }
                     let packet = decode_slice(&buffer);
                     let packet = match packet {
                         Ok(packet) => packet,
-                        Err(e) => {
-                            println!("Decoding error: {:?}", e);
-                            return;
-                        }
+                        Err(_) => return,
                     };
                     let packet = match packet {
                         Some(packet) => packet,
-                        None => continue,
+                        None => {
+                            // The packet is incomplete, wait for more data
+                            cursor += n;
+                            continue;
+                        },
                     };
 
                     match self.handle_packet(&packet).await {
                         Some(()) => (),
                         None => return,
                     }
-                    buffer.advance(n.unwrap());
+                    buffer.advance(cursor + n);
+                    cursor = 0;
                 }
                 else => return,
             }
@@ -214,10 +221,9 @@ impl Connection {
                     // Send to broker
                     let req = ConnectionRequest::Publish(publish.to_owned());
                     self.client_tx.send(req).await.unwrap();
+                } else {
+                    println!("Ignoring duplicate publish packet");
                 }
-            }
-            Packet::Puback(_pid) => {
-                // Do nothing
             }
             Packet::Subscribe(subscribe) => {
                 let topics = &subscribe.topics;
