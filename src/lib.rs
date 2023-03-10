@@ -5,17 +5,17 @@ use bytes::{Buf, BytesMut};
 use codec::{decode_slice, encode_slice, Packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio_stream::StreamExt;
+use tokio_stream::{wrappers::BroadcastStream, StreamMap};
 pub use topic::TopicMatcher;
-
-type TopicSenders = broadcast::Sender<Packet<'static>>;
 
 pub struct Broker {
     listener: TcpListener,
     broker_tx: broadcast::Sender<Packet<'static>>,
-    client_tx: mpsc::Sender<Packet<'static>>,
-    client_rx: mpsc::Receiver<Packet<'static>>,
-    subscribers: TopicMatcher<Vec<TopicSenders>>,
+    client_tx: mpsc::Sender<ConnectionRequest>,
+    client_rx: mpsc::Receiver<ConnectionRequest>,
+    subscribers: TopicMatcher<broadcast::Sender<Packet<'static>>>,
 }
 
 impl Broker {
@@ -45,26 +45,32 @@ impl Broker {
                         client.run().await;
                     });
                 }
-                packet = self.client_rx.recv() => {
-                    match &packet {
-                        Some(Packet::Subscribe(subscribe)) => {
-                            for topic in &subscribe.topics {
-                                if let Some(subscribers) = self.subscribers.get_mut(&topic.topic_path) {
-                                    subscribers.push(self.broker_tx.clone());
-                                } else {
-                                    self.subscribers.insert(&topic.topic_path, vec![self.broker_tx.clone()]);
-                                }
+                req = self.client_rx.recv() => {
+                    match req.unwrap() {
+                        ConnectionRequest::Publish(publish) => {
+                            let topic = &publish.topic_name;
+                            let sender = self.subscribers.get(topic);
+                            if let Some(sender) = sender {
+                                sender.send(Packet::Publish(publish.to_owned())).unwrap();
                             }
                         }
-                        Some(Packet::Publish(publish)) => {
-                            let subscribers = self.subscribers.matches(&publish.topic_name);
-                            for (_, subscriber) in subscribers {
-                                for sender in subscriber {
-                                    sender.send(packet.clone().unwrap()).unwrap();
-                                }
+                        ConnectionRequest::Subscribe(subscribe, res_tx) => {
+                            let topics = &subscribe.topics;
+                            if topics.len() != 1 {
+                                // We do not support multiple topics in a single subscribe packet, disconnect the client
+                                continue;
+                            }
+                            let topic = &topics[0];
+                            if let Some(sub_tx) = self.subscribers.get_mut(&topic.topic_path) {
+                                let sub_rx = sub_tx.subscribe();
+                                res_tx.send(sub_rx.into()).unwrap();
+                            } else {
+                                let (sub_tx, sub_rx) = broadcast::channel(32);
+                                self.subscribers.insert(topic.topic_path.to_owned(), sub_tx);
+                                res_tx.send(sub_rx.into()).unwrap();
                             }
                         }
-                        _ => {}
+                        _ => (),
                     }
                 }
             }
@@ -74,20 +80,36 @@ impl Broker {
 
 struct Connection {
     socket: TcpStream,
-    client_tx: mpsc::Sender<Packet<'static>>,
+    client_tx: mpsc::Sender<ConnectionRequest>,
     broker_rx: broadcast::Receiver<Packet<'static>>,
+    subscription_streams: StreamMap<String, BroadcastStream<Packet<'static>>>,
+}
+
+#[derive(Debug)]
+enum ConnectionRequest {
+    Publish(codec::Publish<'static>),
+    Subscribe(
+        codec::Subscribe,
+        oneshot::Sender<BroadcastStream<Packet<'static>>>,
+    ),
+    Unsubscribe(
+        codec::Unsubscribe,
+        oneshot::Sender<BroadcastStream<Packet<'static>>>,
+    ),
 }
 
 impl Connection {
     fn new(
         socket: TcpStream,
-        client_tx: mpsc::Sender<Packet<'static>>,
+        client_tx: mpsc::Sender<ConnectionRequest>,
         broker_rx: broadcast::Receiver<Packet<'static>>,
     ) -> Self {
+        let subscription_streams = StreamMap::new();
         Self {
             socket,
             broker_rx,
             client_tx,
+            subscription_streams,
         }
     }
 
@@ -124,6 +146,12 @@ impl Connection {
 
         loop {
             tokio::select! {
+                Some(
+                    (_, packet)
+                ) = self.subscription_streams.next() => {
+                    let packet = packet.unwrap();
+                    self.send_packet(&packet).await;
+                }
                 packet = self.broker_rx.recv() => {
                     let packet = packet.unwrap();
                     self.send_packet(&packet).await;
@@ -173,23 +201,32 @@ impl Connection {
                 }
                 if !publish.dup {
                     // Send to broker
-                    let packet = Packet::Publish(publish.to_owned());
-                    self.client_tx.send(packet).await.unwrap();
+                    let req = ConnectionRequest::Publish(publish.to_owned());
+                    self.client_tx.send(req).await.unwrap();
                 }
             }
             Packet::Subscribe(subscribe) => {
-                let pid = subscribe.pid;
                 let topics = &subscribe.topics;
-                let return_codes = topics
-                    .iter()
-                    .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
-                    .collect();
+                if topics.len() != 1 {
+                    // We do not support multiple topics in a single subscribe packet, disconnect the client
+                    return None;
+                }
+                let topic = &topics[0];
+
+                let (req_tx, req_rx) = oneshot::channel::<BroadcastStream<Packet>>();
+                let req = ConnectionRequest::Subscribe(subscribe.to_owned(), req_tx);
+                self.client_tx.send(req).await.unwrap();
+
+                // Wait for the broker to ack the subscription
+                let res = req_rx.await.unwrap();
+                let topic_path = topic.topic_path.clone();
+                self.subscription_streams.insert(topic_path, res);
+
+                // Send suback
+                let pid = subscribe.pid;
+                let return_codes = vec![codec::SubscribeReturnCodes::Success(topic.qos)];
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 self.send_packet(&suback).await;
-
-                // Send to broker
-                let packet = Packet::Subscribe(subscribe.to_owned());
-                self.client_tx.send(packet).await.unwrap();
             }
             _ => {
                 // We do not support other incoming packets, disconnect the client
