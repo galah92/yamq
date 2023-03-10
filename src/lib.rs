@@ -193,6 +193,9 @@ impl Connection {
                     self.client_tx.send(req).await.unwrap();
                 }
             }
+            Packet::Puback(_pid) => {
+                // Do nothing
+            }
             Packet::Subscribe(subscribe) => {
                 let topics = &subscribe.topics;
 
