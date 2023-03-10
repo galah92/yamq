@@ -171,21 +171,22 @@ impl Connection {
                     let packet = match packet {
                         Ok(packet) => packet,
                         Err(e) => {
-                            println!("{:?}", e);
+                            println!("Decoding error: {:?}", e);
                             return;
                         }
                     };
                     let packet = match packet {
                         Some(packet) => packet,
-                        None => return,
+                        None => continue,
                     };
-                    println!("{:?}", packet);
+
                     match self.handle_packet(&packet).await {
                         Some(()) => (),
                         None => return,
                     }
                     buffer.advance(n.unwrap());
                 }
+                else => return,
             }
         }
     }
@@ -272,8 +273,9 @@ impl Connection {
                 let pingresp = Packet::Pingresp;
                 self.send_packet(&pingresp).await;
             }
-            _ => {
+            p => {
                 // We do not support other incoming packets, disconnect the client
+                println!("Unsupported packet: {:?}", p);
                 return None;
             }
         }
