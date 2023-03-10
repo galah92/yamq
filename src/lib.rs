@@ -191,6 +191,11 @@ impl Connection {
             Packet::Subscribe(subscribe) => {
                 let topics = &subscribe.topics;
 
+                if topics.is_empty() {
+                    // [MQTT-3.8.3-3] Invalid subscribe packet, disconnect the client
+                    return None;
+                }
+
                 let (req_tx, req_rx) = oneshot::channel();
                 let req = ConnectionRequest::Subscribe(subscribe.to_owned(), req_tx);
                 self.client_tx.send(req).await.unwrap();
