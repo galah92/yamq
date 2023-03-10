@@ -210,6 +210,10 @@ impl Connection {
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 self.send_packet(&suback).await;
             }
+            Packet::Pingreq => {
+                let pingresp = Packet::Pingresp;
+                self.send_packet(&pingresp).await;
+            }
             _ => {
                 // We do not support other incoming packets, disconnect the client
                 return None;
