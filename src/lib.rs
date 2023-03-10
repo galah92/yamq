@@ -218,7 +218,7 @@ impl Connection {
                 let pid = subscribe.pid;
                 let return_codes = topics
                     .iter()
-                    .map(|_| codec::SubscribeReturnCodes::Success(codec::QoS::AtMostOnce))
+                    .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
                     .collect();
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 self.send_packet(&suback).await;
