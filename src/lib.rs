@@ -44,13 +44,12 @@ impl Broker {
                 req = self.client_rx.recv() => {
                     match req.unwrap() {
                         ConnectionRequest::Publish(publish) => {
-                            let topic = &publish.topic_name;
-                            let sender = self.subscribers.get(topic);
-                            if let Some(sender) = sender {
-                                sender.send(Packet::Publish(publish.to_owned())).unwrap();
+                            for (_, tx) in self.subscribers.matches(&publish.topic_name) {
+                                tx.send(Packet::Publish(publish.to_owned())).unwrap();
                             }
                         }
                         ConnectionRequest::Subscribe(subscribe, res_tx) => {
+                            // TODO: have insert-or-update method instead of this
                             let res = subscribe.topics.iter().map(|topic| {
                                 if let Some(sub_tx) = self.subscribers.get(&topic.topic_path) {
                                     let sub_rx = sub_tx.subscribe();
@@ -63,7 +62,7 @@ impl Broker {
                             }).collect();
                             res_tx.send(res).unwrap();
                         }
-                        ConnectionRequest::Unsubscribe(unsubscribe, res_tx) => {
+                        ConnectionRequest::Unsubscribe(unsubscribe) => {
                             // Remove subscriptions that are no longer used
                             for topic in &unsubscribe.topics {
                                 if let Some(sub_tx) = self.subscribers.get(topic) {
@@ -72,7 +71,6 @@ impl Broker {
                                     }
                                 }
                             }
-                            res_tx.send(()).unwrap();
                         }
                     }
                 }
@@ -94,7 +92,7 @@ enum ConnectionRequest {
         codec::Subscribe,
         oneshot::Sender<Vec<(String, BroadcastStream<Packet<'static>>)>>,
     ),
-    Unsubscribe(codec::Unsubscribe, oneshot::Sender<()>),
+    Unsubscribe(codec::Unsubscribe),
 }
 
 impl Connection {
@@ -237,12 +235,8 @@ impl Connection {
                 }
 
                 // Send to broker
-                let (req_tx, req_rx) = oneshot::channel();
-                let req = ConnectionRequest::Unsubscribe(unsubscribe.to_owned(), req_tx);
+                let req = ConnectionRequest::Unsubscribe(unsubscribe.to_owned());
                 self.client_tx.send(req).await.unwrap();
-
-                // Wait for the broker to ack the unsubscription
-                req_rx.await.unwrap();
 
                 // Send unsuback
                 let pid = unsubscribe.pid;
