@@ -55,20 +55,17 @@ impl Broker {
                             }
                         }
                         ConnectionRequest::Subscribe(subscribe, res_tx) => {
-                            let topics = &subscribe.topics;
-                            if topics.len() != 1 {
-                                // We do not support multiple topics in a single subscribe packet, disconnect the client
-                                continue;
-                            }
-                            let topic = &topics[0];
-                            if let Some(sub_tx) = self.subscribers.get_mut(&topic.topic_path) {
-                                let sub_rx = sub_tx.subscribe();
-                                res_tx.send(sub_rx.into()).unwrap();
-                            } else {
-                                let (sub_tx, sub_rx) = broadcast::channel(32);
-                                self.subscribers.insert(topic.topic_path.to_owned(), sub_tx);
-                                res_tx.send(sub_rx.into()).unwrap();
-                            }
+                            let res = subscribe.topics.iter().map(|topic| {
+                                if let Some(sub_tx) = self.subscribers.get_mut(&topic.topic_path) {
+                                    let sub_rx = sub_tx.subscribe();
+                                    (topic.topic_path.to_owned(), sub_rx.into())
+                                } else {
+                                    let (sub_tx, sub_rx) = broadcast::channel(32);
+                                    self.subscribers.insert(topic.topic_path.to_owned(), sub_tx);
+                                    (topic.topic_path.to_owned(), sub_rx.into())
+                                }
+                            }).collect();
+                            res_tx.send(res).unwrap();
                         }
                         _ => (),
                     }
@@ -90,7 +87,7 @@ enum ConnectionRequest {
     Publish(codec::Publish<'static>),
     Subscribe(
         codec::Subscribe,
-        oneshot::Sender<BroadcastStream<Packet<'static>>>,
+        oneshot::Sender<Vec<(String, BroadcastStream<Packet<'static>>)>>,
     ),
     Unsubscribe(
         codec::Unsubscribe,
@@ -207,24 +204,23 @@ impl Connection {
             }
             Packet::Subscribe(subscribe) => {
                 let topics = &subscribe.topics;
-                if topics.len() != 1 {
-                    // We do not support multiple topics in a single subscribe packet, disconnect the client
-                    return None;
-                }
-                let topic = &topics[0];
 
-                let (req_tx, req_rx) = oneshot::channel::<BroadcastStream<Packet>>();
+                let (req_tx, req_rx) = oneshot::channel();
                 let req = ConnectionRequest::Subscribe(subscribe.to_owned(), req_tx);
                 self.client_tx.send(req).await.unwrap();
 
                 // Wait for the broker to ack the subscription
                 let res = req_rx.await.unwrap();
-                let topic_path = topic.topic_path.clone();
-                self.subscription_streams.insert(topic_path, res);
+                for (topic, stream) in res {
+                    self.subscription_streams.insert(topic, stream);
+                }
 
                 // Send suback
                 let pid = subscribe.pid;
-                let return_codes = vec![codec::SubscribeReturnCodes::Success(topic.qos)];
+                let return_codes = topics
+                    .iter()
+                    .map(|_| codec::SubscribeReturnCodes::Success(codec::QoS::AtMostOnce))
+                    .collect();
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 self.send_packet(&suback).await;
             }
