@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{decoder::*, encoder::*, *};
 
 /// Publish packet ([MQTT 3.3]).
@@ -8,8 +10,8 @@ pub struct Publish<'a> {
     pub dup: bool,
     pub qospid: QosPid,
     pub retain: bool,
-    pub topic_name: std::borrow::Cow<'a, str>,
-    pub payload: std::borrow::Cow<'a, [u8]>,
+    pub topic_name: Cow<'a, str>,
+    pub payload: Cow<'a, [u8]>,
 }
 
 impl<'a> Publish<'a> {
@@ -37,8 +39,8 @@ impl<'a> Publish<'a> {
             dup: header.dup,
             qospid,
             retain: header.retain,
-            topic_name: std::borrow::Cow::from(topic_name),
-            payload: std::borrow::Cow::from(payload),
+            topic_name: Cow::from(topic_name),
+            payload: Cow::from(payload),
         })
     }
     pub(crate) fn to_buffer(&self, buf: &mut [u8], offset: &mut usize) -> Result<usize, Error> {
@@ -90,8 +92,8 @@ impl<'a> Publish<'a> {
             dup: self.dup,
             qospid: self.qospid,
             retain: self.retain,
-            topic_name: std::borrow::Cow::from(self.topic_name.to_string()),
-            payload: std::borrow::Cow::from(self.payload.to_vec()),
+            topic_name: Cow::from(self.topic_name.to_string()),
+            payload: Cow::from(self.payload.to_vec()),
         }
     }
 }
