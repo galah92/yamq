@@ -15,18 +15,19 @@ pub struct Broker {
     client_tx: mpsc::Sender<ConnectionRequest>,
     client_rx: mpsc::Receiver<ConnectionRequest>,
     subscribers: TopicMatcher<broadcast::Sender<Packet<'static>>>,
+    retained: TopicMatcher<codec::Publish<'static>>,
 }
 
 impl Broker {
     pub async fn new() -> Self {
         let listener = TcpListener::bind("127.0.0.1:1883").await.unwrap();
         let (client_tx, client_rx) = mpsc::channel(32);
-        let subscribers = TopicMatcher::new();
         Self {
             listener,
             client_tx,
             client_rx,
-            subscribers,
+            subscribers: TopicMatcher::new(),
+            retained: TopicMatcher::new(),
         }
     }
 
@@ -45,7 +46,20 @@ impl Broker {
                     match req.unwrap() {
                         ConnectionRequest::Publish(publish) => {
                             for (_, tx) in self.subscribers.matches(&publish.topic_name) {
-                                tx.send(Packet::Publish(publish.to_owned())).unwrap();
+                                use broadcast::error::SendError;
+                                if let Err(SendError(err)) = tx.send(Packet::Publish(publish.to_owned())) {
+                                    println!("{:?}", err);
+                                }
+                            }
+
+                            if publish.retain {
+                                if publish.payload.is_empty() {
+                                    // [MQTT-3.3.1-6] Remove retained message
+                                    self.retained.remove(&publish.topic_name);
+                                } else {
+                                    // [MQTT-3.3.1-5] Store retained message
+                                    self.retained.insert(publish.topic_name.clone(), publish);
+                                }
                             }
                         }
                         ConnectionRequest::Subscribe(subscribe, res_tx) => {
@@ -61,6 +75,14 @@ impl Broker {
                                 }
                             }).collect();
                             res_tx.send(res).unwrap();
+
+                            // Send retained messages
+                            for topic in &subscribe.topics {
+                                for (topic, publish) in self.retained.matches(&topic.topic_path) {
+                                    let sub_tx = self.subscribers.get(topic).unwrap();
+                                    sub_tx.send(Packet::Publish(publish.to_owned())).unwrap();
+                                }
+                            }
                         }
                         ConnectionRequest::Unsubscribe(unsubscribe) => {
                             // Remove subscriptions that are no longer used
