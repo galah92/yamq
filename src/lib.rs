@@ -8,12 +8,14 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc};
 pub use topic::TopicMatcher;
 
+type TopicSenders = broadcast::Sender<Packet<'static>>;
+
 pub struct Broker {
     listener: TcpListener,
     broker_tx: broadcast::Sender<Packet<'static>>,
     client_tx: mpsc::Sender<Packet<'static>>,
     client_rx: mpsc::Receiver<Packet<'static>>,
-    subscribers: TopicMatcher<mpsc::Sender<Packet<'static>>>,
+    subscribers: TopicMatcher<Vec<TopicSenders>>,
 }
 
 impl Broker {
@@ -47,19 +49,19 @@ impl Broker {
                     match &packet {
                         Some(Packet::Subscribe(subscribe)) => {
                             for topic in &subscribe.topics {
-                                self.subscribers.insert(topic.topic_path.clone(), self.client_tx.clone());
-                            }
-                        }
-                        Some(Packet::Unsubscribe(unsubscribe)) => {
-                            for topic in &unsubscribe.topics {
-                                self.subscribers.remove(topic);
+                                if let Some(subscribers) = self.subscribers.get_mut(&topic.topic_path) {
+                                    subscribers.push(self.broker_tx.clone());
+                                } else {
+                                    self.subscribers.insert(&topic.topic_path, vec![self.broker_tx.clone()]);
+                                }
                             }
                         }
                         Some(Packet::Publish(publish)) => {
                             let subscribers = self.subscribers.matches(&publish.topic_name);
                             for (_, subscriber) in subscribers {
-                                let packet = packet.clone().unwrap();
-                                subscriber.send(packet).await.unwrap();
+                                for sender in subscriber {
+                                    sender.send(packet.clone().unwrap()).unwrap();
+                                }
                             }
                         }
                         _ => {}
@@ -187,15 +189,6 @@ impl Connection {
 
                 // Send to broker
                 let packet = Packet::Subscribe(subscribe.to_owned());
-                self.client_tx.send(packet).await.unwrap();
-            }
-            Packet::Unsubscribe(unsubscribe) => {
-                let pid = unsubscribe.pid;
-                let unsuback = Packet::Unsuback(pid);
-                self.send_packet(&unsuback).await;
-
-                // Send to broker
-                let packet = Packet::Unsubscribe(unsubscribe.to_owned());
                 self.client_tx.send(packet).await.unwrap();
             }
             _ => {
