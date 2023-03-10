@@ -5,21 +5,22 @@ use bytes::{Buf, BytesMut};
 use codec::{decode_slice, encode_slice, Packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{broadcast, mpsc};
 pub use topic::TopicMatcher;
 
 pub struct Broker {
     listener: TcpListener,
-    broker_tx: tokio::sync::broadcast::Sender<Packet<'static>>,
-    client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
-    client_rx: tokio::sync::mpsc::Receiver<Packet<'static>>,
-    subscribers: TopicMatcher<tokio::sync::mpsc::Sender<Packet<'static>>>,
+    broker_tx: broadcast::Sender<Packet<'static>>,
+    client_tx: mpsc::Sender<Packet<'static>>,
+    client_rx: mpsc::Receiver<Packet<'static>>,
+    subscribers: TopicMatcher<mpsc::Sender<Packet<'static>>>,
 }
 
 impl Broker {
     pub async fn new() -> Self {
         let listener = TcpListener::bind("127.0.0.1:1883").await.unwrap();
-        let (broker_tx, _) = tokio::sync::broadcast::channel(32);
-        let (client_tx, client_rx) = tokio::sync::mpsc::channel(32);
+        let (broker_tx, _) = broadcast::channel(32);
+        let (client_tx, client_rx) = mpsc::channel(32);
         let subscribers = TopicMatcher::new();
         Self {
             listener,
@@ -71,15 +72,15 @@ impl Broker {
 
 struct Connection {
     socket: TcpStream,
-    client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
-    broker_rx: tokio::sync::broadcast::Receiver<Packet<'static>>,
+    client_tx: mpsc::Sender<Packet<'static>>,
+    broker_rx: broadcast::Receiver<Packet<'static>>,
 }
 
 impl Connection {
     fn new(
         socket: TcpStream,
-        client_tx: tokio::sync::mpsc::Sender<Packet<'static>>,
-        broker_rx: tokio::sync::broadcast::Receiver<Packet<'static>>,
+        client_tx: mpsc::Sender<Packet<'static>>,
+        broker_rx: broadcast::Receiver<Packet<'static>>,
     ) -> Self {
         Self {
             socket,
