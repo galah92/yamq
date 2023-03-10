@@ -12,7 +12,6 @@ pub use topic::TopicMatcher;
 
 pub struct Broker {
     listener: TcpListener,
-    broker_tx: broadcast::Sender<Packet<'static>>,
     client_tx: mpsc::Sender<ConnectionRequest>,
     client_rx: mpsc::Receiver<ConnectionRequest>,
     subscribers: TopicMatcher<broadcast::Sender<Packet<'static>>>,
@@ -21,12 +20,10 @@ pub struct Broker {
 impl Broker {
     pub async fn new() -> Self {
         let listener = TcpListener::bind("127.0.0.1:1883").await.unwrap();
-        let (broker_tx, _) = broadcast::channel(32);
         let (client_tx, client_rx) = mpsc::channel(32);
         let subscribers = TopicMatcher::new();
         Self {
             listener,
-            broker_tx,
             client_tx,
             client_rx,
             subscribers,
@@ -39,8 +36,7 @@ impl Broker {
                 result = self.listener.accept() => {
                     let (socket, _) = result.unwrap();
                     let client_tx = self.client_tx.clone();
-                    let broker_rx = self.broker_tx.subscribe();
-                    let mut client = Connection::new(socket, client_tx, broker_rx);
+                    let mut client = Connection::new(socket, client_tx);
                     tokio::spawn(async move {
                         client.run().await;
                     });
@@ -78,7 +74,6 @@ impl Broker {
 struct Connection {
     socket: TcpStream,
     client_tx: mpsc::Sender<ConnectionRequest>,
-    broker_rx: broadcast::Receiver<Packet<'static>>,
     subscription_streams: StreamMap<String, BroadcastStream<Packet<'static>>>,
 }
 
@@ -96,15 +91,10 @@ enum ConnectionRequest {
 }
 
 impl Connection {
-    fn new(
-        socket: TcpStream,
-        client_tx: mpsc::Sender<ConnectionRequest>,
-        broker_rx: broadcast::Receiver<Packet<'static>>,
-    ) -> Self {
+    fn new(socket: TcpStream, client_tx: mpsc::Sender<ConnectionRequest>) -> Self {
         let subscription_streams = StreamMap::new();
         Self {
             socket,
-            broker_rx,
             client_tx,
             subscription_streams,
         }
@@ -146,10 +136,6 @@ impl Connection {
                 Some(
                     (_, packet)
                 ) = self.subscription_streams.next() => {
-                    let packet = packet.unwrap();
-                    self.send_packet(&packet).await;
-                }
-                packet = self.broker_rx.recv() => {
                     let packet = packet.unwrap();
                     self.send_packet(&packet).await;
                 }
