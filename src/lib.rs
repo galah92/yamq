@@ -52,7 +52,7 @@ impl Broker {
                         }
                         ConnectionRequest::Subscribe(subscribe, res_tx) => {
                             let res = subscribe.topics.iter().map(|topic| {
-                                if let Some(sub_tx) = self.subscribers.get_mut(&topic.topic_path) {
+                                if let Some(sub_tx) = self.subscribers.get(&topic.topic_path) {
                                     let sub_rx = sub_tx.subscribe();
                                     (topic.topic_path.to_owned(), sub_rx.into())
                                 } else {
@@ -63,7 +63,17 @@ impl Broker {
                             }).collect();
                             res_tx.send(res).unwrap();
                         }
-                        _ => (),
+                        ConnectionRequest::Unsubscribe(unsubscribe, res_tx) => {
+                            // Remove subscriptions that are no longer used
+                            for topic in &unsubscribe.topics {
+                                if let Some(sub_tx) = self.subscribers.get(topic) {
+                                    if sub_tx.receiver_count() == 0 {
+                                        self.subscribers.remove(topic);
+                                    }
+                                }
+                            }
+                            res_tx.send(()).unwrap();
+                        }
                     }
                 }
             }
@@ -84,10 +94,7 @@ enum ConnectionRequest {
         codec::Subscribe,
         oneshot::Sender<Vec<(String, BroadcastStream<Packet<'static>>)>>,
     ),
-    Unsubscribe(
-        codec::Unsubscribe,
-        oneshot::Sender<BroadcastStream<Packet<'static>>>,
-    ),
+    Unsubscribe(codec::Unsubscribe, oneshot::Sender<()>),
 }
 
 impl Connection {
@@ -196,6 +203,7 @@ impl Connection {
                     return None;
                 }
 
+                // Send to broker
                 let (req_tx, req_rx) = oneshot::channel();
                 let req = ConnectionRequest::Subscribe(subscribe.to_owned(), req_tx);
                 self.client_tx.send(req).await.unwrap();
@@ -214,6 +222,32 @@ impl Connection {
                     .collect();
                 let suback = Packet::Suback(codec::Suback { pid, return_codes });
                 self.send_packet(&suback).await;
+            }
+            Packet::Unsubscribe(unsubscribe) => {
+                let topics = &unsubscribe.topics;
+
+                if topics.is_empty() {
+                    // [MQTT-3.10.3-2] Invalid unsubscribe packet, disconnect the client
+                    return None;
+                }
+
+                // Remove the subscription streams
+                for topic in topics {
+                    self.subscription_streams.remove(topic);
+                }
+
+                // Send to broker
+                let (req_tx, req_rx) = oneshot::channel();
+                let req = ConnectionRequest::Unsubscribe(unsubscribe.to_owned(), req_tx);
+                self.client_tx.send(req).await.unwrap();
+
+                // Wait for the broker to ack the unsubscription
+                req_rx.await.unwrap();
+
+                // Send unsuback
+                let pid = unsubscribe.pid;
+                let unsuback = Packet::Unsuback(pid);
+                self.send_packet(&unsuback).await;
             }
             Packet::Pingreq => {
                 let pingresp = Packet::Pingresp;
