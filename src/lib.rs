@@ -1,8 +1,10 @@
 mod codec;
+mod newcodec;
 mod topic;
 
 use bytes::{Buf, BytesMut};
 use codec::{decode_slice, encode_slice, Packet};
+use newcodec::codec::MqttCodec;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
