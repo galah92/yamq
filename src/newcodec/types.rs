@@ -327,38 +327,29 @@ impl PacketSize for SubscriptionTopic {
 // Control Packets
 #[derive(Debug, PartialEq, Eq)]
 pub struct Connect {
-    // Variable Header
     pub protocol_name: String,
     pub protocol: Protocol,
     pub clean_session: bool,
-    pub keep_alive: u16,
-
-    // Payload
     pub client_id: String,
+    pub keep_alive: u16,
     pub will: Option<FinalWill>,
-    pub user_name: Option<String>,
+    pub username: Option<String>,
     pub password: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Connack {
-    // Variable header
     pub session_present: bool,
     pub code: ConnectReason,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Publish {
-    // Fixed header
     pub dup: bool,
     pub qos: QoS,
+    pub pid: Option<u16>, // TODO: should be conditional on QoS
     pub retain: bool,
-
-    // Variable header
     pub topic: Topic,
-    pub packet_id: Option<u16>,
-
-    // Payload
     pub payload: Bytes,
 }
 
@@ -371,7 +362,7 @@ impl From<FinalWill> for Publish {
 
             // Variable header
             topic: will.topic,
-            packet_id: None,
+            pid: None,
 
             // Payload
             payload: will.payload,
@@ -381,59 +372,45 @@ impl From<FinalWill> for Publish {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Puback {
-    // Variable header
-    pub packet_id: u16,
+    pub pid: u16,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pubrec {
-    // Variable header
-    pub packet_id: u16,
+    pub pid: u16,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pubrel {
-    // Variable header
-    pub packet_id: u16,
+    pub pid: u16,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pubcomp {
-    // Variable header
-    pub packet_id: u16,
+    pub pid: u16,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Subscribe {
-    // Variable header
-    pub packet_id: u16,
-
-    // Payload
+    pub pid: u16,
     pub subscription_topics: Vec<SubscriptionTopic>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Suback {
-    // Variable header
-    pub packet_id: u16,
-
-    // Payload
+    pub pid: u16,
     pub return_codes: Vec<SubscribeAckReason>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Unsubscribe {
-    // Variable header
-    pub packet_id: u16,
-
-    // Payload
+    pub pid: u16,
     pub topic_filters: Vec<TopicFilter>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Unsuback {
-    // Variable header
-    pub packet_id: u16,
+    pub pid: u16,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -526,7 +503,7 @@ impl PacketSize for Packet {
 
                 size += p.client_id.calc_size();
                 size += p.will.calc_size();
-                size += p.user_name.calc_size();
+                size += p.username.calc_size();
                 size += p.password.calc_size();
 
                 size
@@ -537,7 +514,7 @@ impl PacketSize for Packet {
             }
             Packet::Publish(p) => {
                 let mut size = p.topic.calc_size();
-                size += p.packet_id.calc_size();
+                size += p.pid.calc_size();
 
                 // This payload does not have a length prefix
                 size += p.payload.len() as u32;

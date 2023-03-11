@@ -112,9 +112,9 @@ impl ConnectReturnCode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Connect<'a> {
     pub protocol: Protocol,
-    pub keep_alive: u16,
     pub client_id: &'a str,
     pub clean_session: bool,
+    pub keep_alive: u16,
     pub last_will: Option<LastWill<'a>>,
     pub username: Option<&'a str>,
     pub password: Option<&'a [u8]>,

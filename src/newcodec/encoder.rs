@@ -44,7 +44,7 @@ fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
 
     let mut connect_flags: u8 = 0b0000_0000;
 
-    if packet.user_name.is_some() {
+    if packet.username.is_some() {
         connect_flags |= 0b1000_0000;
     }
 
@@ -76,7 +76,7 @@ fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
         encode_binary_data(&will.payload, bytes);
     }
 
-    if let Some(user_name) = &packet.user_name {
+    if let Some(user_name) = &packet.username {
         encode_string(user_name, bytes);
     }
 
@@ -98,7 +98,7 @@ fn encode_connect_ack(packet: &Connack, bytes: &mut BytesMut) {
 fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
     encode_string(&packet.topic.to_string(), bytes);
 
-    if let Some(packet_id) = packet.packet_id {
+    if let Some(packet_id) = packet.pid {
         bytes.put_u16(packet_id);
     }
 
@@ -106,23 +106,23 @@ fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
 }
 
 fn encode_publish_ack(packet: &Puback, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 }
 
 fn encode_publish_received(packet: &Pubrec, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 }
 
 fn encode_publish_release(packet: &Pubrel, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 }
 
 fn encode_publish_complete(packet: &Pubcomp, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 }
 
 fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
         encode_string(&topic.topic_filter.to_string(), bytes);
@@ -147,7 +147,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
 }
 
 fn encode_subscribe_ack(packet: &Suback, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 
     for code in &packet.return_codes {
         bytes.put_u8((*code) as u8);
@@ -155,7 +155,7 @@ fn encode_subscribe_ack(packet: &Suback, bytes: &mut BytesMut) {
 }
 
 fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 
     for topic_filter in &packet.topic_filters {
         encode_string(&topic_filter.to_string(), bytes);
@@ -163,7 +163,7 @@ fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
 }
 
 fn encode_unsubscribe_ack(packet: &Unsuback, bytes: &mut BytesMut) {
-    bytes.put_u16(packet.packet_id);
+    bytes.put_u16(packet.pid);
 }
 
 pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
@@ -211,7 +211,7 @@ mod tests {
 
             client_id: "test_client".to_string(),
             will: None,
-            user_name: None,
+            username: None,
             password: None,
         });
 
@@ -244,7 +244,7 @@ mod tests {
             retain: false,
 
             topic: "test_topic".parse().unwrap(),
-            packet_id: Some(42),
+            pid: Some(42),
 
             payload: vec![22; 100].into(),
         });
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn publish_ack_roundtrip() {
-        let packet = Packet::Puback(Puback { packet_id: 1500 });
+        let packet = Packet::Puback(Puback { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn publish_received_roundtrip() {
-        let packet = Packet::Pubrec(Pubrec { packet_id: 1500 });
+        let packet = Packet::Pubrec(Pubrec { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn publish_release_roundtrip() {
-        let packet = Packet::Pubrel(Pubrel { packet_id: 1500 });
+        let packet = Packet::Pubrel(Pubrel { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn publish_complete_roundtrip() {
-        let packet = Packet::Pubcomp(Pubcomp { packet_id: 1500 });
+        let packet = Packet::Pubcomp(Pubcomp { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn subscribe_roundtrip() {
         let packet = Packet::Subscribe(Subscribe {
-            packet_id: 4500,
+            pid: 4500,
 
             subscription_topics: vec![SubscriptionTopic {
                 topic_filter: "test_topic".parse().unwrap(),
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn subscribe_ack_roundtrip() {
         let packet = Packet::Suback(Suback {
-            packet_id: 1234,
+            pid: 1234,
 
             return_codes: vec![SubscribeAckReason::GrantedQoSZero],
         });
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn unsubscribe_roundtrip() {
         let packet = Packet::Unsubscribe(Unsubscribe {
-            packet_id: 1234,
+            pid: 1234,
             topic_filters: vec!["test_topic".parse().unwrap()],
         });
 
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn unsubscribe_ack_roundtrip() {
-        let packet = Packet::Unsuback(Unsuback { packet_id: 4321 });
+        let packet = Packet::Unsuback(Unsuback { pid: 4321 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);

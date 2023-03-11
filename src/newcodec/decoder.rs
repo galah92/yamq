@@ -183,7 +183,7 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
         keep_alive,
         client_id,
         will,
-        user_name,
+        username: user_name,
         password,
     };
 
@@ -242,7 +242,7 @@ fn decode_publish(
         qos,
         retain,
         topic,
-        packet_id,
+        pid: packet_id,
         payload,
     };
 
@@ -251,28 +251,28 @@ fn decode_publish(
 
 fn decode_publish_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::Puback(Puback { packet_id })))
+    Ok(Some(Packet::Puback(Puback { pid: packet_id })))
 }
 
 fn decode_publish_received(
     bytes: &mut Cursor<&mut BytesMut>,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::Pubrec(Pubrec { packet_id })))
+    Ok(Some(Packet::Pubrec(Pubrec { pid: packet_id })))
 }
 
 fn decode_publish_release(
     bytes: &mut Cursor<&mut BytesMut>,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::Pubrel(Pubrel { packet_id })))
+    Ok(Some(Packet::Pubrel(Pubrel { pid: packet_id })))
 }
 
 fn decode_publish_complete(
     bytes: &mut Cursor<&mut BytesMut>,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::Pubcomp(Pubcomp { packet_id })))
+    Ok(Some(Packet::Pubcomp(Pubcomp { pid: packet_id })))
 }
 
 fn decode_subscribe(
@@ -331,7 +331,7 @@ fn decode_subscribe(
     }
 
     let packet = Subscribe {
-        packet_id,
+        pid: packet_id,
         subscription_topics,
     };
 
@@ -361,7 +361,7 @@ fn decode_subscribe_ack(
     }
 
     let packet = Suback {
-        packet_id,
+        pid: packet_id,
         return_codes: reason_codes,
     };
 
@@ -403,7 +403,7 @@ fn decode_unsubscribe(
     }
 
     let packet = Unsubscribe {
-        packet_id,
+        pid: packet_id,
         topic_filters,
     };
 
@@ -432,7 +432,7 @@ fn decode_unsubscribe_ack(
         reason_codes.push(reason_code);
     }
 
-    let packet = Unsuback { packet_id };
+    let packet = Unsuback { pid: packet_id };
 
     Ok(Some(Packet::Unsuback(packet)))
 }
@@ -548,7 +548,7 @@ mod tests {
             .as_slice(),
         );
         let subscribe = Packet::Subscribe(Subscribe {
-            packet_id: 1,
+            pid: 1,
             subscription_topics: vec![SubscriptionTopic {
                 topic_filter: TopicFilter::Concrete {
                     filter: "test".into(),
