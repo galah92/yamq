@@ -330,7 +330,7 @@ pub struct Connect {
     // Variable Header
     pub protocol_name: String,
     pub protocol: Protocol,
-    pub clean_start: bool,
+    pub clean_session: bool,
     pub keep_alive: u16,
 
     // Payload
@@ -344,13 +344,13 @@ pub struct Connect {
 pub struct Connack {
     // Variable header
     pub session_present: bool,
-    pub reason_code: ConnectReason,
+    pub code: ConnectReason,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Publish {
     // Fixed header
-    pub is_duplicate: bool,
+    pub dup: bool,
     pub qos: QoS,
     pub retain: bool,
 
@@ -365,7 +365,7 @@ pub struct Publish {
 impl From<FinalWill> for Publish {
     fn from(will: FinalWill) -> Self {
         Self {
-            is_duplicate: false,
+            dup: false,
             qos: will.qos,
             retain: will.should_retain,
 
@@ -418,7 +418,7 @@ pub struct Suback {
     pub packet_id: u16,
 
     // Payload
-    pub reason_codes: Vec<SubscribeAckReason>,
+    pub return_codes: Vec<SubscribeAckReason>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -434,9 +434,6 @@ pub struct Unsubscribe {
 pub struct Unsuback {
     // Variable header
     pub packet_id: u16,
-
-    // Payload
-    pub reason_codes: Vec<UnsubscribeAckReason>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -496,7 +493,7 @@ impl Packet {
             Packet::Publish(publish_packet) => {
                 let mut flags: u8 = 0;
 
-                if publish_packet.is_duplicate {
+                if publish_packet.dup {
                     flags |= 0b0000_1000;
                 }
 
@@ -579,7 +576,7 @@ impl PacketSize for Packet {
                 // Packet id
                 let mut size = 2;
 
-                size += p.reason_codes.len() as u32;
+                size += p.return_codes.len() as u32;
 
                 size
             }
@@ -591,13 +588,10 @@ impl PacketSize for Packet {
 
                 size
             }
-            Packet::Unsuback(p) => {
+            Packet::Unsuback(_p) => {
                 // Packet id
-                let mut size = 2;
 
-                size += p.reason_codes.len() as u32;
-
-                size
+                2
             }
             Packet::Pingreq => 0,
             Packet::Pingresp => 0,

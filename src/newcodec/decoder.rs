@@ -179,7 +179,7 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
     let packet = Connect {
         protocol_name,
         protocol,
-        clean_start,
+        clean_session: clean_start,
         keep_alive,
         client_id,
         will,
@@ -200,7 +200,7 @@ fn decode_connect_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet
 
     let packet = Connack {
         session_present,
-        reason_code,
+        code: reason_code,
     };
 
     Ok(Some(Packet::Connack(packet)))
@@ -238,7 +238,7 @@ fn decode_publish(
     let payload = return_if_none!(decode_binary_data_with_size(bytes, payload_size as usize)?);
 
     let packet = Publish {
-        is_duplicate,
+        dup: is_duplicate,
         qos,
         retain,
         topic,
@@ -362,7 +362,7 @@ fn decode_subscribe_ack(
 
     let packet = Suback {
         packet_id,
-        reason_codes,
+        return_codes: reason_codes,
     };
 
     Ok(Some(Packet::Suback(packet)))
@@ -432,10 +432,7 @@ fn decode_unsubscribe_ack(
         reason_codes.push(reason_code);
     }
 
-    let packet = Unsuback {
-        packet_id,
-        reason_codes,
-    };
+    let packet = Unsuback { packet_id };
 
     Ok(Some(Packet::Unsuback(packet)))
 }

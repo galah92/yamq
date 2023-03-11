@@ -62,7 +62,7 @@ fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
         connect_flags |= 0b0000_0100;
     }
 
-    if packet.clean_start {
+    if packet.clean_session {
         connect_flags |= 0b0000_0010;
     }
 
@@ -92,7 +92,7 @@ fn encode_connect_ack(packet: &Connack, bytes: &mut BytesMut) {
     }
 
     bytes.put_u8(connect_ack_flags);
-    bytes.put_u8(packet.reason_code as u8);
+    bytes.put_u8(packet.code as u8);
 }
 
 fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
@@ -149,7 +149,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
 fn encode_subscribe_ack(packet: &Suback, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 
-    for code in &packet.reason_codes {
+    for code in &packet.return_codes {
         bytes.put_u8((*code) as u8);
     }
 }
@@ -164,10 +164,6 @@ fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
 
 fn encode_unsubscribe_ack(packet: &Unsuback, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
-
-    for code in &packet.reason_codes {
-        bytes.put_u8((*code) as u8);
-    }
 }
 
 pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
@@ -210,7 +206,7 @@ mod tests {
         let packet = Packet::Connect(Connect {
             protocol_name: "MQTT".to_string(),
             protocol: Protocol::V311,
-            clean_start: true,
+            clean_session: true,
             keep_alive: 200,
 
             client_id: "test_client".to_string(),
@@ -230,7 +226,7 @@ mod tests {
     fn connect_ack_roundtrip() {
         let packet = Packet::Connack(Connack {
             session_present: false,
-            reason_code: ConnectReason::Success,
+            code: ConnectReason::Success,
         });
 
         let mut bytes = BytesMut::new();
@@ -243,7 +239,7 @@ mod tests {
     #[test]
     fn publish_roundtrip() {
         let packet = Packet::Publish(Publish {
-            is_duplicate: false,
+            dup: false,
             qos: QoS::AtLeastOnce,
             retain: false,
 
@@ -330,7 +326,7 @@ mod tests {
         let packet = Packet::Suback(Suback {
             packet_id: 1234,
 
-            reason_codes: vec![SubscribeAckReason::GrantedQoSZero],
+            return_codes: vec![SubscribeAckReason::GrantedQoSZero],
         });
 
         let mut bytes = BytesMut::new();
@@ -356,11 +352,7 @@ mod tests {
 
     #[test]
     fn unsubscribe_ack_roundtrip() {
-        let packet = Packet::Unsuback(Unsuback {
-            packet_id: 4321,
-
-            reason_codes: vec![UnsubscribeAckReason::Success],
-        });
+        let packet = Packet::Unsuback(Unsuback { packet_id: 4321 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
