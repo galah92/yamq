@@ -10,6 +10,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::StreamExt;
 use tokio_stream::{wrappers::BroadcastStream, StreamMap};
+use tokio_util::codec::{Decoder, Encoder};
 pub use topic::TopicMatcher;
 
 pub struct Broker {
@@ -130,30 +131,33 @@ impl Connection {
     }
 
     async fn run(&mut self) {
-        const MAX_PACKET_SIZE: usize = std::mem::size_of::<Packet>();
-        let mut buffer = BytesMut::with_capacity(MAX_PACKET_SIZE);
+        let mut buffer = BytesMut::new();
+        let mut codec = MqttCodec::new();
 
-        let n = self.socket.read_buf(&mut buffer).await;
-        let packet = decode_slice(&buffer);
-        let packet = match packet {
-            Ok(packet) => packet,
-            Err(e) => {
-                println!("{:?}", e);
+        let n = self.socket.read_buf(&mut buffer).await.unwrap();
+        if n == 0 {
+            return;
+        }
+        let packet = match codec.decode(&mut buffer) {
+            Ok(Some(packet)) => packet,
+            Ok(None) => {
+                println!("Error decoding packet");
+                return;
+            }
+            Err(err) => {
+                println!("Error decoding packet: {:?}", err);
                 return;
             }
         };
-        if let Some(Packet::Connect(_connect)) = &packet {
-            let connack = Packet::Connack(codec::Connack {
-                session_present: false, // TODO: support clean session
-                code: codec::ConnectReturnCode::Accepted,
-            });
-            self.send_packet(&connack).await;
-        } else {
+        let newcodec::types::Packet::Connect(_connect) = &packet else {
             // This is not a connect packet, disconnect the client
             return;
-        }
-
-        buffer.advance(n.unwrap());
+        };
+        let connack = newcodec::types::Packet::Connack(newcodec::types::Connack {
+            session_present: false, // TODO: support clean session
+            code: newcodec::types::ConnectReason::Success,
+        });
+        self.newsend_packet(connack).await;
 
         let mut cursor = 0;
         loop {
@@ -294,5 +298,12 @@ impl Connection {
         let mut encoded = [0u8; 1024];
         let len = encode_slice(packet, &mut encoded).unwrap();
         self.socket.write_all(&encoded[..len]).await.unwrap();
+    }
+
+    async fn newsend_packet(&mut self, packet: newcodec::types::Packet) {
+        let mut codec = MqttCodec::new();
+        let mut buffer = BytesMut::new();
+        codec.encode(packet, &mut buffer).unwrap();
+        self.socket.write_all(&buffer).await.unwrap();
     }
 }

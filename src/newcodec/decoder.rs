@@ -468,6 +468,7 @@ pub fn decode_mqtt(bytes: &mut BytesMut) -> Result<Option<Packet>, DecodeError> 
     let first_byte_val = (first_byte & 0b1111_0000) >> 4;
     let packet_type =
         PacketType::try_from(first_byte_val).map_err(|_| DecodeError::InvalidPacketType)?;
+    println!("HERE");
     let remaining_packet_length = read_variable_int!(&mut bytes);
 
     let cursor_pos = bytes.position() as usize;

@@ -1,3 +1,8 @@
+pub mod decoder;
+pub mod encoder;
+pub mod topic;
+pub mod types;
+
 pub const TOPIC_SEPARATOR: char = '/';
 
 pub const MULTI_LEVEL_WILDCARD: char = '#';
@@ -9,11 +14,6 @@ pub const SINGLE_LEVEL_WILDCARD_STR: &str = "+";
 pub const SHARED_SUBSCRIPTION_PREFIX: &str = "$share/";
 
 pub const MAX_TOPIC_LEN_BYTES: usize = 65_535;
-
-pub mod decoder;
-pub mod encoder;
-pub mod topic;
-pub mod types;
 
 pub mod codec {
     use super::{
@@ -39,22 +39,6 @@ pub mod codec {
                 version: Protocol::V311,
             }
         }
-
-        pub fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Packet>, DecodeError> {
-            // TODO - Ideally we should keep a state machine to store the data we've read so far.
-            let packet = decoder::decode_mqtt(buf);
-
-            if let Ok(Some(Packet::Connect(packet))) = &packet {
-                self.version = packet.protocol;
-            }
-
-            packet
-        }
-
-        pub fn encode(&mut self, packet: Packet, bytes: &mut BytesMut) -> Result<(), EncodeError> {
-            encoder::encode_mqtt(&packet, bytes);
-            Ok(())
-        }
     }
 
     impl Decoder for MqttCodec {
@@ -62,8 +46,11 @@ pub mod codec {
         type Item = Packet;
 
         fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-            // TODO - Ideally we should keep a state machine to store the data we've read so far.
-            self.decode(buf)
+            let packet = decoder::decode_mqtt(buf)?;
+            if let Some(Packet::Connect(packet)) = &packet {
+                self.version = packet.protocol;
+            }
+            Ok(packet)
         }
     }
 
@@ -71,7 +58,8 @@ pub mod codec {
         type Error = EncodeError;
 
         fn encode(&mut self, packet: Packet, bytes: &mut BytesMut) -> Result<(), Self::Error> {
-            self.encode(packet, bytes)
+            encoder::encode_mqtt(&packet, bytes);
+            Ok(())
         }
     }
 }
