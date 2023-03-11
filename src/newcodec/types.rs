@@ -443,18 +443,18 @@ pub struct Unsuback {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Packet {
     Connect(Connect),
-    ConnectAck(Connack),
+    Connack(Connack),
     Publish(Publish),
-    PublishAck(Puback),
-    PublishReceived(Pubrec),
-    PublishRelease(Pubrel),
-    PublishComplete(Pubcomp),
+    Puback(Puback),
+    Pubrec(Pubrec),
+    Pubrel(Pubrel),
+    Pubcomp(Pubcomp),
     Subscribe(Subscribe),
-    SubscribeAck(Suback),
+    Suback(Suback),
     Unsubscribe(Unsubscribe),
-    UnsubscribeAck(Unsuback),
-    PingRequest,
-    PingResponse,
+    Unsuback(Unsuback),
+    Pingreq,
+    Pingresp,
     Disconnect,
 }
 
@@ -462,18 +462,18 @@ impl Packet {
     pub fn to_byte(&self) -> u8 {
         match self {
             Packet::Connect(_) => 1,
-            Packet::ConnectAck(_) => 2,
+            Packet::Connack(_) => 2,
             Packet::Publish(_) => 3,
-            Packet::PublishAck(_) => 4,
-            Packet::PublishReceived(_) => 5,
-            Packet::PublishRelease(_) => 6,
-            Packet::PublishComplete(_) => 7,
+            Packet::Puback(_) => 4,
+            Packet::Pubrec(_) => 5,
+            Packet::Pubrel(_) => 6,
+            Packet::Pubcomp(_) => 7,
             Packet::Subscribe(_) => 8,
-            Packet::SubscribeAck(_) => 9,
+            Packet::Suback(_) => 9,
             Packet::Unsubscribe(_) => 10,
-            Packet::UnsubscribeAck(_) => 11,
-            Packet::PingRequest => 12,
-            Packet::PingResponse => 13,
+            Packet::Unsuback(_) => 11,
+            Packet::Pingreq => 12,
+            Packet::Pingresp => 13,
             Packet::Disconnect => 14,
         }
     }
@@ -481,16 +481,16 @@ impl Packet {
     pub fn fixed_header_flags(&self) -> u8 {
         match self {
             Packet::Connect(_)
-            | Packet::ConnectAck(_)
-            | Packet::PublishAck(_)
-            | Packet::PublishReceived(_)
-            | Packet::PublishComplete(_)
-            | Packet::SubscribeAck(_)
-            | Packet::UnsubscribeAck(_)
-            | Packet::PingRequest
-            | Packet::PingResponse
+            | Packet::Connack(_)
+            | Packet::Puback(_)
+            | Packet::Pubrec(_)
+            | Packet::Pubcomp(_)
+            | Packet::Suback(_)
+            | Packet::Unsuback(_)
+            | Packet::Pingreq
+            | Packet::Pingresp
             | Packet::Disconnect
-            | Packet::PublishRelease(_)
+            | Packet::Pubrel(_)
             | Packet::Subscribe(_)
             | Packet::Unsubscribe(_) => 0b0000_0010,
             Packet::Publish(publish_packet) => {
@@ -534,7 +534,7 @@ impl PacketSize for Packet {
 
                 size
             }
-            Packet::ConnectAck(_p) => {
+            Packet::Connack(_p) => {
                 // flags + reason code
                 1 + 1
             }
@@ -547,22 +547,22 @@ impl PacketSize for Packet {
 
                 size
             }
-            Packet::PublishAck(_p) => {
+            Packet::Puback(_p) => {
                 // packet_id
 
                 2
             }
-            Packet::PublishReceived(_p) => {
+            Packet::Pubrec(_p) => {
                 // packet_id
 
                 2
             }
-            Packet::PublishRelease(_p) => {
+            Packet::Pubrel(_p) => {
                 // packet_id
 
                 2
             }
-            Packet::PublishComplete(_p) => {
+            Packet::Pubcomp(_p) => {
                 // packet_id
 
                 2
@@ -575,7 +575,7 @@ impl PacketSize for Packet {
 
                 size
             }
-            Packet::SubscribeAck(p) => {
+            Packet::Suback(p) => {
                 // Packet id
                 let mut size = 2;
 
@@ -591,7 +591,7 @@ impl PacketSize for Packet {
 
                 size
             }
-            Packet::UnsubscribeAck(p) => {
+            Packet::Unsuback(p) => {
                 // Packet id
                 let mut size = 2;
 
@@ -599,8 +599,8 @@ impl PacketSize for Packet {
 
                 size
             }
-            Packet::PingRequest => 0,
-            Packet::PingResponse => 0,
+            Packet::Pingreq => 0,
+            Packet::Pingresp => 0,
             Packet::Disconnect => 0,
         }
     }

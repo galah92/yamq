@@ -203,7 +203,7 @@ fn decode_connect_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet
         reason_code,
     };
 
-    Ok(Some(Packet::ConnectAck(packet)))
+    Ok(Some(Packet::Connack(packet)))
 }
 
 fn decode_publish(
@@ -251,28 +251,28 @@ fn decode_publish(
 
 fn decode_publish_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::PublishAck(Puback { packet_id })))
+    Ok(Some(Packet::Puback(Puback { packet_id })))
 }
 
 fn decode_publish_received(
     bytes: &mut Cursor<&mut BytesMut>,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::PublishReceived(Pubrec { packet_id })))
+    Ok(Some(Packet::Pubrec(Pubrec { packet_id })))
 }
 
 fn decode_publish_release(
     bytes: &mut Cursor<&mut BytesMut>,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::PublishRelease(Pubrel { packet_id })))
+    Ok(Some(Packet::Pubrel(Pubrel { packet_id })))
 }
 
 fn decode_publish_complete(
     bytes: &mut Cursor<&mut BytesMut>,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-    Ok(Some(Packet::PublishComplete(Pubcomp { packet_id })))
+    Ok(Some(Packet::Pubcomp(Pubcomp { packet_id })))
 }
 
 fn decode_subscribe(
@@ -365,7 +365,7 @@ fn decode_subscribe_ack(
         reason_codes,
     };
 
-    Ok(Some(Packet::SubscribeAck(packet)))
+    Ok(Some(Packet::Suback(packet)))
 }
 
 fn decode_unsubscribe(
@@ -437,7 +437,7 @@ fn decode_unsubscribe_ack(
         reason_codes,
     };
 
-    Ok(Some(Packet::UnsubscribeAck(packet)))
+    Ok(Some(Packet::Unsuback(packet)))
 }
 
 fn decode_packet(
@@ -458,8 +458,8 @@ fn decode_packet(
         PacketType::SubscribeAck => decode_subscribe_ack(bytes, remaining_packet_length),
         PacketType::Unsubscribe => decode_unsubscribe(bytes, remaining_packet_length),
         PacketType::UnsubscribeAck => decode_unsubscribe_ack(bytes, remaining_packet_length),
-        PacketType::PingRequest => Ok(Some(Packet::PingRequest)),
-        PacketType::PingResponse => Ok(Some(Packet::PingResponse)),
+        PacketType::PingRequest => Ok(Some(Packet::Pingreq)),
+        PacketType::PingResponse => Ok(Some(Packet::Pingresp)),
         PacketType::Disconnect => Ok(Some(Packet::Disconnect)),
     }
 }

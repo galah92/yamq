@@ -184,18 +184,18 @@ pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
 
     match packet {
         Packet::Connect(p) => encode_connect(p, bytes),
-        Packet::ConnectAck(p) => encode_connect_ack(p, bytes),
+        Packet::Connack(p) => encode_connect_ack(p, bytes),
         Packet::Publish(p) => encode_publish(p, bytes),
-        Packet::PublishAck(p) => encode_publish_ack(p, bytes),
-        Packet::PublishReceived(p) => encode_publish_received(p, bytes),
-        Packet::PublishRelease(p) => encode_publish_release(p, bytes),
-        Packet::PublishComplete(p) => encode_publish_complete(p, bytes),
+        Packet::Puback(p) => encode_publish_ack(p, bytes),
+        Packet::Pubrec(p) => encode_publish_received(p, bytes),
+        Packet::Pubrel(p) => encode_publish_release(p, bytes),
+        Packet::Pubcomp(p) => encode_publish_complete(p, bytes),
         Packet::Subscribe(p) => encode_subscribe(p, bytes),
-        Packet::SubscribeAck(p) => encode_subscribe_ack(p, bytes),
+        Packet::Suback(p) => encode_subscribe_ack(p, bytes),
         Packet::Unsubscribe(p) => encode_unsubscribe(p, bytes),
-        Packet::UnsubscribeAck(p) => encode_unsubscribe_ack(p, bytes),
-        Packet::PingRequest => (),
-        Packet::PingResponse => (),
+        Packet::Unsuback(p) => encode_unsubscribe_ack(p, bytes),
+        Packet::Pingreq => (),
+        Packet::Pingresp => (),
         Packet::Disconnect => (),
     }
 }
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn connect_ack_roundtrip() {
-        let packet = Packet::ConnectAck(Connack {
+        let packet = Packet::Connack(Connack {
             session_present: false,
             reason_code: ConnectReason::Success,
         });
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn publish_ack_roundtrip() {
-        let packet = Packet::PublishAck(Puback { packet_id: 1500 });
+        let packet = Packet::Puback(Puback { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn publish_received_roundtrip() {
-        let packet = Packet::PublishReceived(Pubrec { packet_id: 1500 });
+        let packet = Packet::Pubrec(Pubrec { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn publish_release_roundtrip() {
-        let packet = Packet::PublishRelease(Pubrel { packet_id: 1500 });
+        let packet = Packet::Pubrel(Pubrel { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn publish_complete_roundtrip() {
-        let packet = Packet::PublishComplete(Pubcomp { packet_id: 1500 });
+        let packet = Packet::Pubcomp(Pubcomp { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn subscribe_ack_roundtrip() {
-        let packet = Packet::SubscribeAck(Suback {
+        let packet = Packet::Suback(Suback {
             packet_id: 1234,
 
             reason_codes: vec![SubscribeAckReason::GrantedQoSZero],
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn unsubscribe_ack_roundtrip() {
-        let packet = Packet::UnsubscribeAck(Unsuback {
+        let packet = Packet::Unsuback(Unsuback {
             packet_id: 4321,
 
             reason_codes: vec![UnsubscribeAckReason::Success],
@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn ping_request_roundtrip() {
-        let packet = Packet::PingRequest;
+        let packet = Packet::Pingreq;
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
         let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn ping_response_roundtrip() {
-        let packet = Packet::PingResponse;
+        let packet = Packet::Pingresp;
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
         let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
