@@ -1,11 +1,10 @@
 use super::{
     topic::Topic,
     types::{
-        AuthenticatePacket, AuthenticateReason, Connack, Connect, ConnectReason, DecodeError,
-        FinalWill, Packet, PacketType, Protocol, Puback, Pubcomp, Publish, PublishAckReason,
-        PublishCompleteReason, PublishReceivedReason, PublishReleaseReason, Pubrec, Pubrel, QoS,
-        RetainHandling, Suback, Subscribe, SubscribeAckReason, SubscriptionTopic, Unsuback,
-        Unsubscribe, UnsubscribeAckReason,
+        Connack, Connect, ConnectReason, DecodeError, FinalWill, Packet, PacketType, Protocol,
+        Puback, Pubcomp, Publish, PublishAckReason, PublishCompleteReason, PublishReceivedReason,
+        PublishReleaseReason, Pubrec, Pubrel, QoS, RetainHandling, Suback, Subscribe,
+        SubscribeAckReason, SubscriptionTopic, Unsuback, Unsubscribe, UnsubscribeAckReason,
     },
 };
 use bytes::{Buf, Bytes, BytesMut};
@@ -516,25 +515,6 @@ fn decode_unsubscribe_ack(
     Ok(Some(Packet::UnsubscribeAck(packet)))
 }
 
-fn decode_authenticate(
-    bytes: &mut Cursor<&mut BytesMut>,
-    remaining_packet_length: u32,
-) -> Result<Option<Packet>, DecodeError> {
-    if remaining_packet_length == 0 {
-        return Ok(Some(Packet::Authenticate(AuthenticatePacket {
-            reason_code: AuthenticateReason::Success,
-        })));
-    }
-
-    let reason_code_byte = read_u8!(bytes);
-    let reason_code = AuthenticateReason::try_from(reason_code_byte)
-        .map_err(|_| DecodeError::InvalidAuthenticateReason)?;
-
-    let packet = AuthenticatePacket { reason_code };
-
-    Ok(Some(Packet::Authenticate(packet)))
-}
-
 fn decode_packet(
     packet_type: &PacketType,
     bytes: &mut Cursor<&mut BytesMut>,
@@ -556,7 +536,6 @@ fn decode_packet(
         PacketType::PingRequest => Ok(Some(Packet::PingRequest)),
         PacketType::PingResponse => Ok(Some(Packet::PingResponse)),
         PacketType::Disconnect => Ok(Some(Packet::Disconnect)),
-        PacketType::Authenticate => decode_authenticate(bytes, remaining_packet_length),
     }
 }
 

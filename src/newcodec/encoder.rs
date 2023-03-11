@@ -1,6 +1,6 @@
 use super::types::{
-    AuthenticatePacket, Connack, Connect, Packet, Puback, Pubcomp, Publish, Pubrec, Pubrel, Suback,
-    Subscribe, Unsuback, Unsubscribe, VariableByteInt,
+    Connack, Connect, Packet, Puback, Pubcomp, Publish, Pubrec, Pubrel, Suback, Subscribe,
+    Unsuback, Unsubscribe, VariableByteInt,
 };
 use bytes::{BufMut, BytesMut};
 
@@ -170,10 +170,6 @@ fn encode_unsubscribe_ack(packet: &Unsuback, bytes: &mut BytesMut) {
     }
 }
 
-fn encode_authenticate(packet: &AuthenticatePacket, bytes: &mut BytesMut) {
-    bytes.put_u8(packet.reason_code as u8);
-}
-
 pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
     let remaining_length = packet.calculate_size();
     let packet_size = 1 + VariableByteInt(remaining_length).calculate_size() + remaining_length;
@@ -198,10 +194,9 @@ pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
         Packet::SubscribeAck(p) => encode_subscribe_ack(p, bytes),
         Packet::Unsubscribe(p) => encode_unsubscribe(p, bytes),
         Packet::UnsubscribeAck(p) => encode_unsubscribe_ack(p, bytes),
-        Packet::PingRequest => {}
-        Packet::PingResponse => {}
-        Packet::Disconnect => {}
-        Packet::Authenticate(p) => encode_authenticate(p, bytes),
+        Packet::PingRequest => (),
+        Packet::PingResponse => (),
+        Packet::Disconnect => (),
     }
 }
 
@@ -409,18 +404,6 @@ mod tests {
     #[test]
     fn disconnect_roundtrip() {
         let packet = Packet::Disconnect;
-        let mut bytes = BytesMut::new();
-        encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
-
-        assert_eq!(packet, decoded);
-    }
-
-    #[test]
-    fn authenticate_roundtrip() {
-        let packet = Packet::Authenticate(AuthenticatePacket {
-            reason_code: AuthenticateReason::Success,
-        });
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
         let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();

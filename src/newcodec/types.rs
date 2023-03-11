@@ -20,7 +20,6 @@ pub enum DecodeError {
     InvalidPublishCompleteReason,
     InvalidSubscribeAckReason,
     InvalidUnsubscribeAckReason,
-    InvalidAuthenticateReason,
     InvalidTopic(TopicParseError),
     InvalidTopicFilter(TopicParseError),
     Io(std::io::Error),
@@ -185,7 +184,6 @@ pub enum PacketType {
     PingRequest = 12,
     PingResponse = 13,
     Disconnect = 14,
-    Authenticate = 15,
 }
 
 #[repr(u8)]
@@ -335,14 +333,6 @@ pub enum DisconnectReason {
     MaximumConnectTime = 160,
     SubscriptionIdentifiersNotAvailable = 161,
     WildcardSubscriptionsNotAvailable = 162,
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
-pub enum AuthenticateReason {
-    Success = 0,
-    ContinueAuthentication = 24,
-    ReAuthenticate = 25,
 }
 
 // Payloads
@@ -499,12 +489,6 @@ pub struct Unsuback {
     pub reason_codes: Vec<UnsubscribeAckReason>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct AuthenticatePacket {
-    // Variable header
-    pub reason_code: AuthenticateReason,
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum Packet {
@@ -522,7 +506,6 @@ pub enum Packet {
     PingRequest,
     PingResponse,
     Disconnect,
-    Authenticate(AuthenticatePacket),
 }
 
 impl Packet {
@@ -542,7 +525,6 @@ impl Packet {
             Packet::PingRequest => 12,
             Packet::PingResponse => 13,
             Packet::Disconnect => 14,
-            Packet::Authenticate(_) => 15,
         }
     }
 
@@ -558,10 +540,9 @@ impl Packet {
             | Packet::PingRequest
             | Packet::PingResponse
             | Packet::Disconnect
-            | Packet::Authenticate(_) => 0b0000_0000,
-            Packet::PublishRelease(_) | Packet::Subscribe(_) | Packet::Unsubscribe(_) => {
-                0b0000_0010
-            }
+            | Packet::PublishRelease(_)
+            | Packet::Subscribe(_)
+            | Packet::Unsubscribe(_) => 0b0000_0010,
             Packet::Publish(publish_packet) => {
                 let mut flags: u8 = 0;
 
@@ -671,11 +652,6 @@ impl PacketSize for Packet {
             Packet::PingRequest => 0,
             Packet::PingResponse => 0,
             Packet::Disconnect => 0,
-            Packet::Authenticate(_p) => {
-                // reason_code
-
-                1
-            }
         }
     }
 }
