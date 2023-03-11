@@ -382,7 +382,7 @@ impl PacketSize for SubscriptionTopic {
 
 // Control Packets
 #[derive(Debug, PartialEq, Eq)]
-pub struct ConnectPacket {
+pub struct Connect {
     // Variable Header
     pub protocol_name: String,
     pub protocol: Protocol,
@@ -397,14 +397,14 @@ pub struct ConnectPacket {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ConnectAckPacket {
+pub struct Connack {
     // Variable header
     pub session_present: bool,
     pub reason_code: ConnectReason,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PublishPacket {
+pub struct Publish {
     // Fixed header
     pub is_duplicate: bool,
     pub qos: QoS,
@@ -418,7 +418,7 @@ pub struct PublishPacket {
     pub payload: Bytes,
 }
 
-impl From<FinalWill> for PublishPacket {
+impl From<FinalWill> for Publish {
     fn from(will: FinalWill) -> Self {
         Self {
             is_duplicate: false,
@@ -436,35 +436,35 @@ impl From<FinalWill> for PublishPacket {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PublishAckPacket {
+pub struct Puback {
     // Variable header
     pub packet_id: u16,
     pub reason_code: PublishAckReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PublishReceivedPacket {
+pub struct Pubrec {
     // Variable header
     pub packet_id: u16,
     pub reason_code: PublishReceivedReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PublishReleasePacket {
+pub struct Pubrel {
     // Variable header
     pub packet_id: u16,
     pub reason_code: PublishReleaseReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PublishCompletePacket {
+pub struct Pubcomp {
     // Variable header
     pub packet_id: u16,
     pub reason_code: PublishCompleteReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct SubscribePacket {
+pub struct Subscribe {
     // Variable header
     pub packet_id: u16,
 
@@ -473,7 +473,7 @@ pub struct SubscribePacket {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct SubscribeAckPacket {
+pub struct Suback {
     // Variable header
     pub packet_id: u16,
 
@@ -482,7 +482,7 @@ pub struct SubscribeAckPacket {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct UnsubscribePacket {
+pub struct Unsubscribe {
     // Variable header
     pub packet_id: u16,
 
@@ -491,7 +491,7 @@ pub struct UnsubscribePacket {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct UnsubscribeAckPacket {
+pub struct Unsuback {
     // Variable header
     pub packet_id: u16,
 
@@ -508,17 +508,17 @@ pub struct AuthenticatePacket {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum Packet {
-    Connect(ConnectPacket),
-    ConnectAck(ConnectAckPacket),
-    Publish(PublishPacket),
-    PublishAck(PublishAckPacket),
-    PublishReceived(PublishReceivedPacket),
-    PublishRelease(PublishReleasePacket),
-    PublishComplete(PublishCompletePacket),
-    Subscribe(SubscribePacket),
-    SubscribeAck(SubscribeAckPacket),
-    Unsubscribe(UnsubscribePacket),
-    UnsubscribeAck(UnsubscribeAckPacket),
+    Connect(Connect),
+    ConnectAck(Connack),
+    Publish(Publish),
+    PublishAck(Puback),
+    PublishReceived(Pubrec),
+    PublishRelease(Pubrel),
+    PublishComplete(Pubcomp),
+    Subscribe(Subscribe),
+    SubscribeAck(Suback),
+    Unsubscribe(Unsubscribe),
+    UnsubscribeAck(Unsuback),
     PingRequest,
     PingResponse,
     Disconnect,

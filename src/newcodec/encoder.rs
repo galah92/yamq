@@ -1,7 +1,6 @@
 use super::types::{
-    AuthenticatePacket, ConnectAckPacket, ConnectPacket, Packet, PublishAckPacket,
-    PublishCompletePacket, PublishPacket, PublishReceivedPacket, PublishReleasePacket,
-    SubscribeAckPacket, SubscribePacket, UnsubscribeAckPacket, UnsubscribePacket, VariableByteInt,
+    AuthenticatePacket, Connack, Connect, Packet, Puback, Pubcomp, Publish, Pubrec, Pubrel, Suback,
+    Subscribe, Unsuback, Unsubscribe, VariableByteInt,
 };
 use bytes::{BufMut, BytesMut};
 
@@ -39,7 +38,7 @@ fn encode_binary_data(value: &[u8], bytes: &mut BytesMut) {
     bytes.put_slice(value);
 }
 
-fn encode_connect(packet: &ConnectPacket, bytes: &mut BytesMut) {
+fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
     encode_string(&packet.protocol_name, bytes);
     bytes.put_u8(packet.protocol as u8);
 
@@ -86,7 +85,7 @@ fn encode_connect(packet: &ConnectPacket, bytes: &mut BytesMut) {
     }
 }
 
-fn encode_connect_ack(packet: &ConnectAckPacket, bytes: &mut BytesMut) {
+fn encode_connect_ack(packet: &Connack, bytes: &mut BytesMut) {
     let mut connect_ack_flags: u8 = 0b0000_0000;
     if packet.session_present {
         connect_ack_flags |= 0b0000_0001;
@@ -96,7 +95,7 @@ fn encode_connect_ack(packet: &ConnectAckPacket, bytes: &mut BytesMut) {
     bytes.put_u8(packet.reason_code as u8);
 }
 
-fn encode_publish(packet: &PublishPacket, bytes: &mut BytesMut) {
+fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
     encode_string(&packet.topic.to_string(), bytes);
 
     if let Some(packet_id) = packet.packet_id {
@@ -106,23 +105,23 @@ fn encode_publish(packet: &PublishPacket, bytes: &mut BytesMut) {
     bytes.put_slice(&packet.payload);
 }
 
-fn encode_publish_ack(packet: &PublishAckPacket, bytes: &mut BytesMut) {
+fn encode_publish_ack(packet: &Puback, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 }
 
-fn encode_publish_received(packet: &PublishReceivedPacket, bytes: &mut BytesMut) {
+fn encode_publish_received(packet: &Pubrec, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 }
 
-fn encode_publish_release(packet: &PublishReleasePacket, bytes: &mut BytesMut) {
+fn encode_publish_release(packet: &Pubrel, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 }
 
-fn encode_publish_complete(packet: &PublishCompletePacket, bytes: &mut BytesMut) {
+fn encode_publish_complete(packet: &Pubcomp, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 }
 
-fn encode_subscribe(packet: &SubscribePacket, bytes: &mut BytesMut) {
+fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 
     for topic in &packet.subscription_topics {
@@ -147,7 +146,7 @@ fn encode_subscribe(packet: &SubscribePacket, bytes: &mut BytesMut) {
     }
 }
 
-fn encode_subscribe_ack(packet: &SubscribeAckPacket, bytes: &mut BytesMut) {
+fn encode_subscribe_ack(packet: &Suback, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 
     for code in &packet.reason_codes {
@@ -155,7 +154,7 @@ fn encode_subscribe_ack(packet: &SubscribeAckPacket, bytes: &mut BytesMut) {
     }
 }
 
-fn encode_unsubscribe(packet: &UnsubscribePacket, bytes: &mut BytesMut) {
+fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 
     for topic_filter in &packet.topic_filters {
@@ -163,7 +162,7 @@ fn encode_unsubscribe(packet: &UnsubscribePacket, bytes: &mut BytesMut) {
     }
 }
 
-fn encode_unsubscribe_ack(packet: &UnsubscribeAckPacket, bytes: &mut BytesMut) {
+fn encode_unsubscribe_ack(packet: &Unsuback, bytes: &mut BytesMut) {
     bytes.put_u16(packet.packet_id);
 
     for code in &packet.reason_codes {
@@ -213,7 +212,7 @@ mod tests {
 
     #[test]
     fn connect_roundtrip() {
-        let packet = Packet::Connect(ConnectPacket {
+        let packet = Packet::Connect(Connect {
             protocol_name: "MQTT".to_string(),
             protocol: Protocol::V311,
             clean_start: true,
@@ -234,7 +233,7 @@ mod tests {
 
     #[test]
     fn connect_ack_roundtrip() {
-        let packet = Packet::ConnectAck(ConnectAckPacket {
+        let packet = Packet::ConnectAck(Connack {
             session_present: false,
             reason_code: ConnectReason::Success,
         });
@@ -248,7 +247,7 @@ mod tests {
 
     #[test]
     fn publish_roundtrip() {
-        let packet = Packet::Publish(PublishPacket {
+        let packet = Packet::Publish(Publish {
             is_duplicate: false,
             qos: QoS::AtLeastOnce,
             retain: false,
@@ -268,7 +267,7 @@ mod tests {
 
     #[test]
     fn publish_ack_roundtrip() {
-        let packet = Packet::PublishAck(PublishAckPacket {
+        let packet = Packet::PublishAck(Puback {
             packet_id: 1500,
             reason_code: PublishAckReason::Success,
         });
@@ -282,7 +281,7 @@ mod tests {
 
     #[test]
     fn publish_received_roundtrip() {
-        let packet = Packet::PublishReceived(PublishReceivedPacket {
+        let packet = Packet::PublishReceived(Pubrec {
             packet_id: 1500,
             reason_code: PublishReceivedReason::Success,
         });
@@ -296,7 +295,7 @@ mod tests {
 
     #[test]
     fn publish_release_roundtrip() {
-        let packet = Packet::PublishRelease(PublishReleasePacket {
+        let packet = Packet::PublishRelease(Pubrel {
             packet_id: 1500,
             reason_code: PublishReleaseReason::Success,
         });
@@ -310,7 +309,7 @@ mod tests {
 
     #[test]
     fn publish_complete_roundtrip() {
-        let packet = Packet::PublishComplete(PublishCompletePacket {
+        let packet = Packet::PublishComplete(Pubcomp {
             packet_id: 1500,
             reason_code: PublishCompleteReason::Success,
         });
@@ -324,7 +323,7 @@ mod tests {
 
     #[test]
     fn subscribe_roundtrip() {
-        let packet = Packet::Subscribe(SubscribePacket {
+        let packet = Packet::Subscribe(Subscribe {
             packet_id: 4500,
 
             subscription_topics: vec![SubscriptionTopic {
@@ -345,7 +344,7 @@ mod tests {
 
     #[test]
     fn subscribe_ack_roundtrip() {
-        let packet = Packet::SubscribeAck(SubscribeAckPacket {
+        let packet = Packet::SubscribeAck(Suback {
             packet_id: 1234,
 
             reason_codes: vec![SubscribeAckReason::GrantedQoSZero],
@@ -360,7 +359,7 @@ mod tests {
 
     #[test]
     fn unsubscribe_roundtrip() {
-        let packet = Packet::Unsubscribe(UnsubscribePacket {
+        let packet = Packet::Unsubscribe(Unsubscribe {
             packet_id: 1234,
             topic_filters: vec!["test_topic".parse().unwrap()],
         });
@@ -374,7 +373,7 @@ mod tests {
 
     #[test]
     fn unsubscribe_ack_roundtrip() {
-        let packet = Packet::UnsubscribeAck(UnsubscribeAckPacket {
+        let packet = Packet::UnsubscribeAck(Unsuback {
             packet_id: 4321,
 
             reason_codes: vec![UnsubscribeAckReason::Success],

@@ -1,12 +1,11 @@
 use super::{
     topic::Topic,
     types::{
-        AuthenticatePacket, AuthenticateReason, ConnectAckPacket, ConnectPacket, ConnectReason,
-        DecodeError, FinalWill, Packet, PacketType, Protocol, PublishAckPacket, PublishAckReason,
-        PublishCompletePacket, PublishCompleteReason, PublishPacket, PublishReceivedPacket,
-        PublishReceivedReason, PublishReleasePacket, PublishReleaseReason, QoS, RetainHandling,
-        SubscribeAckPacket, SubscribeAckReason, SubscribePacket, SubscriptionTopic,
-        UnsubscribeAckPacket, UnsubscribeAckReason, UnsubscribePacket,
+        AuthenticatePacket, AuthenticateReason, Connack, Connect, ConnectReason, DecodeError,
+        FinalWill, Packet, PacketType, Protocol, Puback, Pubcomp, Publish, PublishAckReason,
+        PublishCompleteReason, PublishReceivedReason, PublishReleaseReason, Pubrec, Pubrel, QoS,
+        RetainHandling, Suback, Subscribe, SubscribeAckReason, SubscriptionTopic, Unsuback,
+        Unsubscribe, UnsubscribeAckReason,
     },
 };
 use bytes::{Buf, Bytes, BytesMut};
@@ -179,7 +178,7 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
         password = Some(read_string!(bytes));
     }
 
-    let packet = ConnectPacket {
+    let packet = Connect {
         protocol_name,
         protocol,
         clean_start,
@@ -201,7 +200,7 @@ fn decode_connect_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet
     let reason_code =
         ConnectReason::try_from(reason_code_byte).map_err(|_| DecodeError::InvalidConnectReason)?;
 
-    let packet = ConnectAckPacket {
+    let packet = Connack {
         session_present,
         reason_code,
     };
@@ -240,7 +239,7 @@ fn decode_publish(
     let payload_size = remaining_packet_length - variable_header_size;
     let payload = return_if_none!(decode_binary_data_with_size(bytes, payload_size as usize)?);
 
-    let packet = PublishPacket {
+    let packet = Publish {
         is_duplicate,
         qos,
         retain,
@@ -259,7 +258,7 @@ fn decode_publish_ack(
     let packet_id = read_u16!(bytes);
 
     if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishAck(PublishAckPacket {
+        return Ok(Some(Packet::PublishAck(Puback {
             packet_id,
             reason_code: PublishAckReason::Success,
         })));
@@ -269,7 +268,7 @@ fn decode_publish_ack(
     let reason_code = PublishAckReason::try_from(reason_code_byte)
         .map_err(|_| DecodeError::InvalidPublishAckReason)?;
 
-    let packet = PublishAckPacket {
+    let packet = Puback {
         packet_id,
         reason_code,
     };
@@ -284,7 +283,7 @@ fn decode_publish_received(
     let packet_id = read_u16!(bytes);
 
     if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishReceived(PublishReceivedPacket {
+        return Ok(Some(Packet::PublishReceived(Pubrec {
             packet_id,
             reason_code: PublishReceivedReason::Success,
         })));
@@ -294,7 +293,7 @@ fn decode_publish_received(
     let reason_code = PublishReceivedReason::try_from(reason_code_byte)
         .map_err(|_| DecodeError::InvalidPublishReceivedReason)?;
 
-    let packet = PublishReceivedPacket {
+    let packet = Pubrec {
         packet_id,
         reason_code,
     };
@@ -309,7 +308,7 @@ fn decode_publish_release(
     let packet_id = read_u16!(bytes);
 
     if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishRelease(PublishReleasePacket {
+        return Ok(Some(Packet::PublishRelease(Pubrel {
             packet_id,
             reason_code: PublishReleaseReason::Success,
         })));
@@ -319,7 +318,7 @@ fn decode_publish_release(
     let reason_code = PublishReleaseReason::try_from(reason_code_byte)
         .map_err(|_| DecodeError::InvalidPublishReleaseReason)?;
 
-    let packet = PublishReleasePacket {
+    let packet = Pubrel {
         packet_id,
         reason_code,
     };
@@ -334,7 +333,7 @@ fn decode_publish_complete(
     let packet_id = read_u16!(bytes);
 
     if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishComplete(PublishCompletePacket {
+        return Ok(Some(Packet::PublishComplete(Pubcomp {
             packet_id,
             reason_code: PublishCompleteReason::Success,
         })));
@@ -344,7 +343,7 @@ fn decode_publish_complete(
     let reason_code = PublishCompleteReason::try_from(reason_code_byte)
         .map_err(|_| DecodeError::InvalidPublishCompleteReason)?;
 
-    let packet = PublishCompletePacket {
+    let packet = Pubcomp {
         packet_id,
         reason_code,
     };
@@ -407,7 +406,7 @@ fn decode_subscribe(
         bytes_read += (end_cursor_pos - start_cursor_pos) as usize;
     }
 
-    let packet = SubscribePacket {
+    let packet = Subscribe {
         packet_id,
         subscription_topics,
     };
@@ -437,7 +436,7 @@ fn decode_subscribe_ack(
         reason_codes.push(reason_code);
     }
 
-    let packet = SubscribeAckPacket {
+    let packet = Suback {
         packet_id,
         reason_codes,
     };
@@ -479,7 +478,7 @@ fn decode_unsubscribe(
         bytes_read += (end_cursor_pos - start_cursor_pos) as usize;
     }
 
-    let packet = UnsubscribePacket {
+    let packet = Unsubscribe {
         packet_id,
         topic_filters,
     };
@@ -509,7 +508,7 @@ fn decode_unsubscribe_ack(
         reason_codes.push(reason_code);
     }
 
-    let packet = UnsubscribeAckPacket {
+    let packet = Unsuback {
         packet_id,
         reason_codes,
     };
@@ -647,7 +646,7 @@ mod tests {
             ]
             .as_slice(),
         );
-        let subscribe = Packet::Subscribe(SubscribePacket {
+        let subscribe = Packet::Subscribe(Subscribe {
             packet_id: 1,
             subscription_topics: vec![SubscriptionTopic {
                 topic_filter: TopicFilter::Concrete {
