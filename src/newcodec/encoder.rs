@@ -125,7 +125,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
-        encode_string(&topic.topic_filter.to_string(), bytes);
+        encode_string(&&topic.topic_path.to_string(), bytes);
 
         let mut options_byte = 0b0000_0000;
         let retain_handling_byte = topic.retain_handling as u8;
@@ -157,7 +157,7 @@ fn encode_subscribe_ack(packet: &Suback, bytes: &mut BytesMut) {
 fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
-    for topic_filter in &packet.topic_filters {
+    for topic_filter in &packet.topics {
         encode_string(&topic_filter.to_string(), bytes);
     }
 }
@@ -306,7 +306,8 @@ mod tests {
             pid: 4500,
 
             subscription_topics: vec![SubscriptionTopic {
-                topic_filter: "test_topic".parse().unwrap(),
+                topic_path: "test_topic".to_string(),
+                topic_filter: "test_topic".to_string().parse().unwrap(),
                 maximum_qos: QoS::AtLeastOnce,
                 no_local: false,
                 retain_as_published: false,
@@ -340,7 +341,7 @@ mod tests {
     fn unsubscribe_roundtrip() {
         let packet = Packet::Unsubscribe(Unsubscribe {
             pid: 1234,
-            topic_filters: vec!["test_topic".parse().unwrap()],
+            topics: vec!["test_topic".parse().unwrap()],
         });
 
         let mut bytes = BytesMut::new();

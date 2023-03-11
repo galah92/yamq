@@ -9,24 +9,10 @@ use std::str::FromStr;
 /// Shared topic filter example: $share/group_name_a/home/kitchen/temperature
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TopicFilter {
-    Concrete {
-        filter: String,
-        level_count: u32,
-    },
-    Wildcard {
-        filter: String,
-        level_count: u32,
-    },
-    SharedConcrete {
-        group_name: String,
-        filter: String,
-        level_count: u32,
-    },
-    SharedWildcard {
-        group_name: String,
-        filter: String,
-        level_count: u32,
-    },
+    Concrete,
+    Wildcard,
+    SharedConcrete,
+    SharedWildcard,
 }
 
 /// A topic name publishers use when sending MQTT messages.
@@ -64,24 +50,6 @@ pub enum TopicParseError {
 impl std::fmt::Display for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.topic_name)
-    }
-}
-
-impl std::fmt::Display for TopicFilter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TopicFilter::Concrete { filter, .. } | TopicFilter::Wildcard { filter, .. } => {
-                write!(f, "{}", filter)
-            }
-            TopicFilter::SharedConcrete {
-                group_name, filter, ..
-            }
-            | TopicFilter::SharedWildcard {
-                group_name, filter, ..
-            } => {
-                write!(f, "{}{}/{}", SHARED_SUBSCRIPTION_PREFIX, group_name, filter)
-            }
-        }
     }
 }
 
@@ -171,31 +139,17 @@ impl FromStr for TopicFilter {
             let (level_count, contains_wildcards) = process_filter(shared_filter)?;
 
             if contains_wildcards {
-                TopicFilter::SharedWildcard {
-                    group_name: group_name.to_string(),
-                    filter: shared_filter.to_string(),
-                    level_count,
-                }
+                TopicFilter::SharedWildcard
             } else {
-                TopicFilter::SharedConcrete {
-                    group_name: group_name.to_string(),
-                    filter: shared_filter.to_string(),
-                    level_count,
-                }
+                TopicFilter::SharedConcrete
             }
         } else {
             let (level_count, contains_wildcards) = process_filter(filter)?;
 
             if contains_wildcards {
-                TopicFilter::Wildcard {
-                    filter: filter.to_string(),
-                    level_count,
-                }
+                TopicFilter::Wildcard
             } else {
-                TopicFilter::Concrete {
-                    filter: filter.to_string(),
-                    level_count,
-                }
+                TopicFilter::Concrete
             }
         };
 
@@ -282,122 +236,62 @@ mod tests {
 
     #[test]
     fn test_topic_filter_parse_concrete() {
-        assert_eq!(
-            "/".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Concrete {
-                filter: "/".to_string(),
-                level_count: 2
-            }
-        );
+        assert_eq!("/".parse::<TopicFilter>().unwrap(), TopicFilter::Concrete);
 
-        assert_eq!(
-            "a".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Concrete {
-                filter: "a".to_string(),
-                level_count: 1
-            }
-        );
+        assert_eq!("a".parse::<TopicFilter>().unwrap(), TopicFilter::Concrete);
 
         // $SYS topics can be subscribed to, but can't be published
         assert_eq!(
             "home/kitchen".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Concrete {
-                filter: "home/kitchen".to_string(),
-                level_count: 2
-            }
+            TopicFilter::Concrete
         );
 
         assert_eq!(
             "home/kitchen/temperature".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Concrete {
-                filter: "home/kitchen/temperature".to_string(),
-                level_count: 3,
-            }
+            TopicFilter::Concrete
         );
 
         assert_eq!(
             "home/kitchen/temperature/celsius"
                 .parse::<TopicFilter>()
                 .unwrap(),
-            TopicFilter::Concrete {
-                filter: "home/kitchen/temperature/celsius".to_string(),
-                level_count: 4,
-            }
+            TopicFilter::Concrete
         );
     }
 
     #[test]
     fn test_topic_filter_parse_single_level_wildcard() {
-        assert_eq!(
-            "+".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "+".to_string(),
-                level_count: 1
-            }
-        );
+        assert_eq!("+".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
 
-        assert_eq!(
-            "+/".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "+/".to_string(),
-                level_count: 2
-            }
-        );
+        assert_eq!("+/".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
 
         assert_eq!(
             "sport/+".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "sport/+".to_string(),
-                level_count: 2
-            }
+            TopicFilter::Wildcard
         );
 
-        assert_eq!(
-            "/+".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "/+".to_string(),
-                level_count: 2
-            }
-        );
+        assert_eq!("/+".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
     }
 
     #[test]
     fn test_topic_filter_parse_multi_level_wildcard() {
-        assert_eq!(
-            "#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "#".to_string(),
-                level_count: 1
-            }
-        );
+        assert_eq!("#".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
 
         assert_eq!(
             "#/".parse::<TopicFilter>().unwrap_err(),
             TopicParseError::MultilevelWildcardNotAtEnd
         );
 
-        assert_eq!(
-            "/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "/#".to_string(),
-                level_count: 2
-            }
-        );
+        assert_eq!("/#".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
 
         assert_eq!(
             "sport/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "sport/#".to_string(),
-                level_count: 2
-            }
+            TopicFilter::Wildcard
         );
 
         assert_eq!(
             "home/kitchen/temperature/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "home/kitchen/temperature/#".to_string(),
-                level_count: 4,
-            }
+            TopicFilter::Wildcard
         );
     }
 
@@ -405,31 +299,19 @@ mod tests {
     fn test_topic_filter_parse_shared_subscription_concrete() {
         assert_eq!(
             "$share/group_a/home".parse::<TopicFilter>().unwrap(),
-            TopicFilter::SharedConcrete {
-                group_name: "group_a".to_string(),
-                filter: "home".to_string(),
-                level_count: 1,
-            }
+            TopicFilter::SharedConcrete
         );
 
         assert_eq!(
             "$share/group_a/home/kitchen/temperature"
                 .parse::<TopicFilter>()
                 .unwrap(),
-            TopicFilter::SharedConcrete {
-                group_name: "group_a".to_string(),
-                filter: "home/kitchen/temperature".to_string(),
-                level_count: 3,
-            }
+            TopicFilter::SharedConcrete
         );
 
         assert_eq!(
             "$share/group_a//".parse::<TopicFilter>().unwrap(),
-            TopicFilter::SharedConcrete {
-                group_name: "group_a".to_string(),
-                filter: "/".to_string(),
-                level_count: 2,
-            }
+            TopicFilter::SharedConcrete
         );
     }
 
@@ -437,42 +319,26 @@ mod tests {
     fn test_topic_filter_parse_shared_subscription_wildcard() {
         assert_eq!(
             "$share/group_b/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::SharedWildcard {
-                group_name: "group_b".to_string(),
-                filter: "#".to_string(),
-                level_count: 1,
-            }
+            TopicFilter::SharedWildcard
         );
 
         assert_eq!(
             "$share/group_b/+".parse::<TopicFilter>().unwrap(),
-            TopicFilter::SharedWildcard {
-                group_name: "group_b".to_string(),
-                filter: "+".to_string(),
-                level_count: 1,
-            }
+            TopicFilter::SharedWildcard
         );
 
         assert_eq!(
             "$share/group_b/+/temperature"
                 .parse::<TopicFilter>()
                 .unwrap(),
-            TopicFilter::SharedWildcard {
-                group_name: "group_b".to_string(),
-                filter: "+/temperature".to_string(),
-                level_count: 2,
-            }
+            TopicFilter::SharedWildcard
         );
 
         assert_eq!(
             "$share/group_c/+/temperature/+/meta"
                 .parse::<TopicFilter>()
                 .unwrap(),
-            TopicFilter::SharedWildcard {
-                group_name: "group_c".to_string(),
-                filter: "+/temperature/+/meta".to_string(),
-                level_count: 4,
-            }
+            TopicFilter::SharedWildcard
         );
     }
 
@@ -511,34 +377,22 @@ mod tests {
     fn test_topic_filter_parse_sys_prefix() {
         assert_eq!(
             "$SYS/stats".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Concrete {
-                filter: "$SYS/stats".to_string(),
-                level_count: 2
-            }
+            TopicFilter::Concrete
         );
 
         assert_eq!(
             "/$SYS/stats".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Concrete {
-                filter: "/$SYS/stats".to_string(),
-                level_count: 3
-            }
+            TopicFilter::Concrete
         );
 
         assert_eq!(
             "$SYS/+".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "$SYS/+".to_string(),
-                level_count: 2
-            }
+            TopicFilter::Wildcard
         );
 
         assert_eq!(
             "$SYS/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard {
-                filter: "$SYS/#".to_string(),
-                level_count: 2
-            }
+            TopicFilter::Wildcard
         );
     }
 

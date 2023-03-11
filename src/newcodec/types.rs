@@ -1,7 +1,4 @@
-use super::{
-    topic::{Topic, TopicFilter, TopicParseError},
-    SHARED_SUBSCRIPTION_PREFIX,
-};
+use super::topic::{Topic, TopicFilter, TopicParseError};
 use bytes::{Bytes, BytesMut};
 use num_enum::TryFromPrimitive;
 
@@ -139,21 +136,15 @@ impl PacketSize for Topic {
     }
 }
 
+impl PacketSize for Vec<Topic> {
+    fn calc_size(&self) -> u32 {
+        self.iter().map(|x| x.calc_size()).sum()
+    }
+}
+
 impl PacketSize for TopicFilter {
     fn calc_size(&self) -> u32 {
-        match self {
-            TopicFilter::Concrete { filter, .. } | TopicFilter::Wildcard { filter, .. } => {
-                filter.calc_size()
-            }
-            TopicFilter::SharedConcrete {
-                group_name, filter, ..
-            }
-            | TopicFilter::SharedWildcard {
-                group_name, filter, ..
-            } => {
-                (2 + SHARED_SUBSCRIPTION_PREFIX.len() + group_name.len() + 1 + filter.len()) as u32
-            }
-        }
+        0
     }
 }
 
@@ -309,8 +300,9 @@ impl PacketSize for FinalWill {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubscriptionTopic {
+    pub topic_path: String,
     pub topic_filter: TopicFilter,
     pub maximum_qos: QoS,
     pub no_local: bool,
@@ -320,12 +312,12 @@ pub struct SubscriptionTopic {
 
 impl PacketSize for SubscriptionTopic {
     fn calc_size(&self) -> u32 {
-        self.topic_filter.calc_size() + 1
+        self.topic_path.calc_size() + self.topic_filter.calc_size() + 1
     }
 }
 
 // Control Packets
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connect {
     pub protocol_name: String,
     pub protocol: Protocol,
@@ -337,7 +329,7 @@ pub struct Connect {
     pub password: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connack {
     pub session_present: bool,
     pub code: ConnectReason,
@@ -370,51 +362,51 @@ impl From<FinalWill> for Publish {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Puback {
     pub pid: u16,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pubrec {
     pub pid: u16,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pubrel {
     pub pid: u16,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pubcomp {
     pub pid: u16,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subscribe {
     pub pid: u16,
     pub subscription_topics: Vec<SubscriptionTopic>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Suback {
     pub pid: u16,
     pub return_codes: Vec<SubscribeAckReason>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unsubscribe {
     pub pid: u16,
-    pub topic_filters: Vec<TopicFilter>,
+    pub topics: Vec<Topic>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unsuback {
     pub pid: u16,
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Packet {
     Connect(Connect),
     Connack(Connack),
@@ -561,7 +553,7 @@ impl PacketSize for Packet {
                 // Packet id
                 let mut size = 2;
 
-                size += p.topic_filters.calc_size();
+                size += p.topics.calc_size();
 
                 size
             }

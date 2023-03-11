@@ -317,6 +317,7 @@ fn decode_subscribe(
         let no_local = (options_byte & 0b0000_0100) == 0b0000_0100;
 
         let subscription_topic = SubscriptionTopic {
+            topic_path: topic_filter_str,
             topic_filter,
             maximum_qos,
             no_local,
@@ -382,7 +383,7 @@ fn decode_unsubscribe(
     }
     let payload_size = remaining_packet_length - variable_header_size;
 
-    let mut topic_filters = vec![];
+    let mut topics = vec![];
     let mut bytes_read: usize = 0;
 
     loop {
@@ -392,11 +393,9 @@ fn decode_unsubscribe(
 
         let start_cursor_pos = bytes.position();
 
-        let topic_filter_str = read_string!(bytes);
-        let topic_filter = topic_filter_str
-            .parse()
-            .map_err(DecodeError::InvalidTopicFilter)?;
-        topic_filters.push(topic_filter);
+        let topic_str = read_string!(bytes);
+        let topic = topic_str.parse().map_err(DecodeError::InvalidTopicFilter)?;
+        topics.push(topic);
 
         let end_cursor_pos = bytes.position();
         bytes_read += (end_cursor_pos - start_cursor_pos) as usize;
@@ -404,7 +403,7 @@ fn decode_unsubscribe(
 
     let packet = Unsubscribe {
         pid: packet_id,
-        topic_filters,
+        topics,
     };
 
     Ok(Some(Packet::Unsubscribe(packet)))
@@ -468,7 +467,6 @@ pub fn decode_mqtt(bytes: &mut BytesMut) -> Result<Option<Packet>, DecodeError> 
     let first_byte_val = (first_byte & 0b1111_0000) >> 4;
     let packet_type =
         PacketType::try_from(first_byte_val).map_err(|_| DecodeError::InvalidPacketType)?;
-    println!("HERE");
     let remaining_packet_length = read_variable_int!(&mut bytes);
 
     let cursor_pos = bytes.position() as usize;
@@ -551,10 +549,8 @@ mod tests {
         let subscribe = Packet::Subscribe(Subscribe {
             pid: 1,
             subscription_topics: vec![SubscriptionTopic {
-                topic_filter: TopicFilter::Concrete {
-                    filter: "test".into(),
-                    level_count: 1,
-                },
+                topic_path: "test".into(),
+                topic_filter: TopicFilter::Concrete,
                 maximum_qos: QoS::AtMostOnce,
                 no_local: false,
                 retain_as_published: false,

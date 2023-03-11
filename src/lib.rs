@@ -2,14 +2,12 @@ mod codec;
 mod newcodec;
 mod topic;
 
-use bytes::{Buf, BytesMut};
-use codec::{decode_slice, encode_slice, Packet};
+use bytes::BytesMut;
 use newcodec::codec::MqttCodec;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio_stream::StreamExt;
-use tokio_stream::{wrappers::BroadcastStream, StreamMap};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt, StreamMap};
 use tokio_util::codec::{Decoder, Encoder};
 pub use topic::TopicMatcher;
 
@@ -17,8 +15,8 @@ pub struct Broker {
     listener: TcpListener,
     client_tx: mpsc::Sender<ConnectionRequest>,
     client_rx: mpsc::Receiver<ConnectionRequest>,
-    subscribers: TopicMatcher<broadcast::Sender<Packet<'static>>>,
-    retained: TopicMatcher<codec::Publish<'static>>,
+    subscribers: TopicMatcher<broadcast::Sender<newcodec::types::Packet>>,
+    retained: TopicMatcher<newcodec::types::Publish>,
 }
 
 impl Broker {
@@ -48,9 +46,10 @@ impl Broker {
                 req = self.client_rx.recv() => {
                     match req.unwrap() {
                         ConnectionRequest::Publish(publish) => {
-                            for (_, tx) in self.subscribers.matches(&publish.topic_name) {
+                            for (_, tx) in self.subscribers.matches(publish.topic.topic_name()) {
                                 use broadcast::error::SendError;
-                                if let Err(SendError(err)) = tx.send(Packet::Publish(publish.to_owned())) {
+                                let publish = newcodec::types::Packet::Publish(publish.clone());
+                                if let Err(SendError(err)) = tx.send(publish) {
                                     println!("{:?}", err);
                                 }
                             }
@@ -58,16 +57,16 @@ impl Broker {
                             if publish.retain {
                                 if publish.payload.is_empty() {
                                     // [MQTT-3.3.1-6] Remove retained message
-                                    self.retained.remove(&publish.topic_name);
+                                    self.retained.remove(publish.topic.topic_name());
                                 } else {
                                     // [MQTT-3.3.1-5] Store retained message
-                                    self.retained.insert(publish.topic_name.clone(), publish);
+                                    self.retained.insert(publish.topic.topic_name(), publish.clone());
                                 }
                             }
                         }
                         ConnectionRequest::Subscribe(subscribe, res_tx) => {
                             // TODO: have insert-or-update method instead of this
-                            let res = subscribe.topics.iter().map(|topic| {
+                            let res = subscribe.subscription_topics.iter().map(|topic| {
                                 if let Some(sub_tx) = self.subscribers.get(&topic.topic_path) {
                                     let sub_rx = sub_tx.subscribe();
                                     (topic.topic_path.to_owned(), sub_rx.into())
@@ -80,19 +79,19 @@ impl Broker {
                             res_tx.send(res).unwrap();
 
                             // Send retained messages
-                            for topic in &subscribe.topics {
+                            for topic in &subscribe.subscription_topics {
                                 for (topic, publish) in self.retained.matches(&topic.topic_path) {
                                     let sub_tx = self.subscribers.get(topic).unwrap();
-                                    sub_tx.send(Packet::Publish(publish.to_owned())).unwrap();
+                                    sub_tx.send(newcodec::types::Packet::Publish(publish.clone())).unwrap();
                                 }
                             }
                         }
                         ConnectionRequest::Unsubscribe(unsubscribe) => {
                             // Remove subscriptions that are no longer used
                             for topic in &unsubscribe.topics {
-                                if let Some(sub_tx) = self.subscribers.get(topic) {
+                                if let Some(sub_tx) = self.subscribers.get(topic.topic_name()) {
                                     if sub_tx.receiver_count() == 0 {
-                                        self.subscribers.remove(topic);
+                                        self.subscribers.remove(topic.topic_name());
                                     }
                                 }
                             }
@@ -107,17 +106,17 @@ impl Broker {
 struct Connection {
     socket: TcpStream,
     client_tx: mpsc::Sender<ConnectionRequest>,
-    subscription_streams: StreamMap<String, BroadcastStream<Packet<'static>>>,
+    subscription_streams: StreamMap<String, BroadcastStream<newcodec::types::Packet>>,
 }
 
 #[derive(Debug)]
 enum ConnectionRequest {
-    Publish(codec::Publish<'static>),
+    Publish(newcodec::types::Publish),
     Subscribe(
-        codec::Subscribe,
-        oneshot::Sender<Vec<(String, BroadcastStream<Packet<'static>>)>>,
+        newcodec::types::Subscribe,
+        oneshot::Sender<Vec<(String, BroadcastStream<newcodec::types::Packet>)>>,
     ),
-    Unsubscribe(codec::Unsubscribe),
+    Unsubscribe(newcodec::types::Unsubscribe),
 }
 
 impl Connection {
@@ -134,9 +133,16 @@ impl Connection {
         let mut buffer = BytesMut::new();
         let mut codec = MqttCodec::new();
 
-        let n = self.socket.read_buf(&mut buffer).await.unwrap();
-        if n == 0 {
-            return;
+        match self.socket.read_buf(&mut buffer).await {
+            Ok(0) => {
+                println!("Client disconnected");
+                return;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                println!("Error reading from socket: {:?}", err);
+                return;
+            }
         }
         let packet = match codec.decode(&mut buffer) {
             Ok(Some(packet)) => packet,
@@ -159,80 +165,73 @@ impl Connection {
         });
         self.newsend_packet(connack).await;
 
-        let mut cursor = 0;
         loop {
             tokio::select! {
                 Some(
                     (_, packet)
                 ) = self.subscription_streams.next() => {
                     let packet = packet.unwrap();
-                    self.send_packet(&packet).await;
+                    self.newsend_packet(packet).await;
                 }
                 n = self.socket.read_buf(&mut buffer) => {
-                    if n.is_err() {
-                        println!("Error reading from socket");
-                        return;
+                    match self.socket.read_buf(&mut buffer).await {
+                        Ok(0) => {
+                            println!("Client disconnected");
+                            return;
+                        }
+                        Ok(_) => {}
+                        Err(err) => {
+                            println!("Error reading from socket: {:?}", err);
+                            return;
+                        }
                     }
-                    let n = n.unwrap();
-                    if n == 0 {
-                        // The socket has been closed
-                        return;
-                    }
-                    let packet = decode_slice(&buffer);
-                    let packet = match packet {
-                        Ok(packet) => packet,
-                        Err(_) => return,
+                    let packet = match codec.decode(&mut buffer) {
+                        Ok(Some(packet)) => packet,
+                        Ok(None) => continue, // The packet is incomplete, wait for more data
+                        Err(err) => {
+                            println!("Error decoding packet: {:?}", err);
+                            return;
+                        }
                     };
-                    let packet = match packet {
-                        Some(packet) => packet,
-                        None => {
-                            // The packet is incomplete, wait for more data
-                            cursor += n;
-                            continue;
-                        },
-                    };
-
-                    match self.handle_packet(&packet).await {
+                    match self.handle_packet(packet).await {
                         Some(()) => (),
                         None => return,
                     }
-                    buffer.advance(cursor + n);
-                    cursor = 0;
                 }
                 else => return,
             }
         }
     }
 
-    async fn handle_packet(&mut self, packet: &Packet<'_>) -> Option<()> {
+    async fn handle_packet(&mut self, packet: newcodec::types::Packet) -> Option<()> {
         match packet {
-            Packet::Disconnect => {
+            newcodec::types::Packet::Disconnect => {
                 return None;
             }
-            Packet::Publish(publish) => {
-                let qospid = publish.qospid;
-                match qospid.qos() {
-                    codec::QoS::AtMostOnce => (),
-                    codec::QoS::AtLeastOnce => {
-                        let pid = qospid.pid().unwrap();
-                        let puback = Packet::Puback(pid);
-                        self.send_packet(&puback).await;
+            newcodec::types::Packet::Publish(publish) => {
+                match publish.qos {
+                    newcodec::types::QoS::AtMostOnce => (),
+                    newcodec::types::QoS::AtLeastOnce => {
+                        let pid = publish.pid.unwrap();
+                        let puback = newcodec::types::Puback { pid };
+                        let puback = newcodec::types::Packet::Puback(puback);
+                        self.newsend_packet(puback).await;
                     }
-                    codec::QoS::ExactlyOnce => {
+                    newcodec::types::QoS::ExactlyOnce => {
                         // We do not support QoS 2, disconnect the client
                         return None;
                     }
                 }
                 if !publish.dup {
                     // Send to broker
-                    let req = ConnectionRequest::Publish(publish.to_owned());
+                    let req = ConnectionRequest::Publish(publish);
                     self.client_tx.send(req).await.unwrap();
                 } else {
                     println!("Ignoring duplicate publish packet");
                 }
             }
-            Packet::Subscribe(subscribe) => {
-                let topics = &subscribe.topics;
+            newcodec::types::Packet::Subscribe(subscribe) => {
+                let topics = &subscribe.subscription_topics;
 
                 if topics.is_empty() {
                     // [MQTT-3.8.3-3] Invalid subscribe packet, disconnect the client
@@ -241,7 +240,7 @@ impl Connection {
 
                 // Send to broker
                 let (req_tx, req_rx) = oneshot::channel();
-                let req = ConnectionRequest::Subscribe(subscribe.to_owned(), req_tx);
+                let req = ConnectionRequest::Subscribe(subscribe.clone(), req_tx);
                 self.client_tx.send(req).await.unwrap();
 
                 // Wait for the broker to ack the subscription
@@ -254,12 +253,13 @@ impl Connection {
                 let pid = subscribe.pid;
                 let return_codes = topics
                     .iter()
-                    .map(|topic| codec::SubscribeReturnCodes::Success(topic.qos))
+                    .map(|topic| newcodec::types::SubscribeAckReason::GrantedQoSOne)
                     .collect();
-                let suback = Packet::Suback(codec::Suback { pid, return_codes });
-                self.send_packet(&suback).await;
+                let suback = newcodec::types::Suback { pid, return_codes };
+                let suback = newcodec::types::Packet::Suback(suback);
+                self.newsend_packet(suback).await;
             }
-            Packet::Unsubscribe(unsubscribe) => {
+            newcodec::types::Packet::Unsubscribe(unsubscribe) => {
                 let topics = &unsubscribe.topics;
 
                 if topics.is_empty() {
@@ -269,7 +269,7 @@ impl Connection {
 
                 // Remove the subscription streams
                 for topic in topics {
-                    self.subscription_streams.remove(topic);
+                    self.subscription_streams.remove(topic.topic_name());
                 }
 
                 // Send to broker
@@ -278,12 +278,13 @@ impl Connection {
 
                 // Send unsuback
                 let pid = unsubscribe.pid;
-                let unsuback = Packet::Unsuback(pid);
-                self.send_packet(&unsuback).await;
+                let unsuback = newcodec::types::Unsuback { pid };
+                let unsuback = newcodec::types::Packet::Unsuback(unsuback);
+                self.newsend_packet(unsuback).await;
             }
-            Packet::Pingreq => {
-                let pingresp = Packet::Pingresp;
-                self.send_packet(&pingresp).await;
+            newcodec::types::Packet::Pingreq => {
+                let pingresp = newcodec::types::Packet::Pingresp;
+                self.newsend_packet(pingresp).await;
             }
             p => {
                 // We do not support other incoming packets, disconnect the client
@@ -292,12 +293,6 @@ impl Connection {
             }
         }
         Some(())
-    }
-
-    async fn send_packet(&mut self, packet: &Packet<'_>) {
-        let mut encoded = [0u8; 1024];
-        let len = encode_slice(packet, &mut encoded).unwrap();
-        self.socket.write_all(&encoded[..len]).await.unwrap();
     }
 
     async fn newsend_packet(&mut self, packet: newcodec::types::Packet) {
