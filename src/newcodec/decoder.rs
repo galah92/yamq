@@ -2,11 +2,11 @@ use super::{
     topic::Topic,
     types::{
         AuthenticatePacket, AuthenticateReason, ConnectAckPacket, ConnectPacket, ConnectReason,
-        DecodeError, FinalWill, Packet, PacketType, ProtocolVersion, PublishAckPacket,
-        PublishAckReason, PublishCompletePacket, PublishCompleteReason, PublishPacket,
-        PublishReceivedPacket, PublishReceivedReason, PublishReleasePacket, PublishReleaseReason,
-        QoS, RetainHandling, SubscribeAckPacket, SubscribeAckReason, SubscribePacket,
-        SubscriptionTopic, UnsubscribeAckPacket, UnsubscribeAckReason, UnsubscribePacket,
+        DecodeError, FinalWill, Packet, PacketType, Protocol, PublishAckPacket, PublishAckReason,
+        PublishCompletePacket, PublishCompleteReason, PublishPacket, PublishReceivedPacket,
+        PublishReceivedReason, PublishReleasePacket, PublishReleaseReason, QoS, RetainHandling,
+        SubscribeAckPacket, SubscribeAckReason, SubscribePacket, SubscriptionTopic,
+        UnsubscribeAckPacket, UnsubscribeAckReason, UnsubscribePacket,
     },
 };
 use bytes::{Buf, Bytes, BytesMut};
@@ -139,8 +139,8 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
     let connect_flags = read_u8!(bytes);
     let keep_alive = read_u16!(bytes);
 
-    let protocol_version = ProtocolVersion::try_from(protocol_level)
-        .map_err(|_| DecodeError::InvalidProtocolVersion)?;
+    let protocol =
+        Protocol::try_from(protocol_level).map_err(|_| DecodeError::InvalidProtocolVersion)?;
 
     // Start payload
     let clean_start = connect_flags & 0b0000_0010 == 0b0000_0010;
@@ -181,7 +181,7 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
 
     let packet = ConnectPacket {
         protocol_name,
-        protocol_version,
+        protocol,
         clean_start,
         keep_alive,
         client_id,
@@ -641,14 +641,13 @@ mod tests {
 
     #[test]
     fn test_decode_subscribe() {
-        // Subscribe packet *without* Subscription Identifier
         let mut without_subscription_identifier = BytesMut::from(
             [
-                0x82, 0x0a, 0x00, 0x01, 0x00, 0x00, 0x04, 0x74, 0x65, 0x73, 0x74, 0x00,
+                0x82, 0x09, 0x00, 0x01, 0x00, 0x04, 0x74, 0x65, 0x73, 0x74, 0x00,
             ]
             .as_slice(),
         );
-        let without_subscription_identifier_expected = Packet::Subscribe(SubscribePacket {
+        let subscribe = Packet::Subscribe(SubscribePacket {
             packet_id: 1,
             subscription_topics: vec![SubscriptionTopic {
                 topic_filter: TopicFilter::Concrete {
@@ -664,30 +663,7 @@ mod tests {
         let decoded = decode_mqtt(&mut without_subscription_identifier)
             .unwrap()
             .unwrap();
-        assert_eq!(without_subscription_identifier_expected, decoded);
-
-        // Subscribe packet with Subscription Identifier
-        let mut packet = BytesMut::from(
-            [
-                0x82, 0x0c, 0xff, 0xf6, 0x02, 0x0b, 0x01, 0x00, 0x04, 0x74, 0x65, 0x73, 0x74, 0x02,
-            ]
-            .as_slice(),
-        );
-        let decoded = decode_mqtt(&mut packet).unwrap().unwrap();
-        let with_subscription_identifier_expected = Packet::Subscribe(SubscribePacket {
-            packet_id: 65526,
-            subscription_topics: vec![SubscriptionTopic {
-                topic_filter: TopicFilter::Concrete {
-                    filter: "test".into(),
-                    level_count: 1,
-                },
-                maximum_qos: QoS::ExactlyOnce,
-                no_local: false,
-                retain_as_published: false,
-                retain_handling: RetainHandling::SendAtSubscribeTime,
-            }],
-        });
-        assert_eq!(with_subscription_identifier_expected, decoded);
+        assert_eq!(subscribe, decoded);
     }
     #[test]
     fn test_decode_variable_int_crash() {

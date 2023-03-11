@@ -1,32 +1,5 @@
 use super::*;
 
-/// Decode bytes from a [BytesMut] buffer as a [Packet] enum.
-///
-/// The buf is never actually written to, it only takes a `BytesMut` instead of a `Bytes` to
-/// allow using the same buffer to read bytes from network.
-///
-/// ```
-/// # use mqttrs::*;
-/// # use bytes::*;
-/// // Fill a buffer with encoded data (probably from a `TcpStream`).
-/// let mut buf = BytesMut::from(&[
-/// 0b00110000, 11,
-///                                0, 4, 't' as u8, 'e' as u8, 's' as u8, 't' as u8,
-///                                'h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8] as &[u8]);
-///
-/// // Parse the bytes and check the result.
-/// match decode_slice(&mut buf) {
-///     Ok(Some(Packet::Publish(p))) => {
-///         assert_eq!(p.payload, b"hello");
-///     },
-///     // In real code you probably don't want to panic like that ;)
-///     Ok(None) => panic!("not enough data"),
-///     other => panic!("unexpected {:?}", other),
-/// }
-/// ```
-///
-/// [Packet]: ../enum.Packet.html
-/// [BytesMut]: https://docs.rs/bytes/1.0.0/bytes/struct.BytesMut.html
 pub fn decode_slice(buf: &[u8]) -> Result<Option<Packet>, Error> {
     if let Some((_, r)) = decode_slice_with_len(buf)? {
         Ok(Some(r))
@@ -35,52 +8,6 @@ pub fn decode_slice(buf: &[u8]) -> Result<Option<Packet>, Error> {
     }
 }
 
-/// Decode bytes from a [BytesMut] buffer as a [Packet] enum, returning a tuple containing the
-/// number of bytes read from the buffer and the [Packet].
-///
-/// The buf is never actually written to, it only takes a `BytesMut` instead of a `Bytes` to
-/// allow using the same buffer to read bytes from network.
-///
-/// ```
-/// # use mqttrs::*;
-/// # use bytes::*;
-/// // Fill a buffer with encoded data (probably from a `TcpStream`).
-/// // this contains 2 packets worth of data
-/// let mut buf = BytesMut::from(&[
-///     // publish packet
-///     0b00110000, 11,
-///     0, 4, 't' as u8, 'e' as u8, 's' as u8, 't' as u8,
-///     'h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8,
-///     // pingresp packet
-///     0b11010000, 0b00000000,
-/// ] as &[u8]);
-///
-/// // Parse the first packet
-/// // and store the number of bytes that were parsed out
-/// let len = match decode_slice_with_len(&mut buf) {
-///     Ok(Some((len, Packet::Publish(p)))) => {
-///         assert_eq!(p.payload, b"hello");
-///         assert_eq!(len, 13); // only parsed 13 bytes
-///         len
-///     },
-///     // In real code you probably don't want to panic like that ;)
-///     Ok(None) => panic!("not enough data"),
-///     other => panic!("unexpected {:?}", other),
-/// };
-///
-/// // parse the second packet, starting from the end of the first packet:
-/// match decode_slice_with_len(&mut buf[len..]) {
-///     Ok(Some((len, Packet::Pingresp))) => {
-///         assert_eq!(len, 2); // parsed 2 bytes
-///     },
-///     // In real code you probably don't want to panic like that ;)
-///     Ok(None) => panic!("not enough data"),
-///     other => panic!("unexpected {:?}", other),
-/// }
-/// ```
-///
-/// [Packet]: ../enum.Packet.html
-/// [BytesMut]: https://docs.rs/bytes/1.0.0/bytes/struct.BytesMut.html
 pub fn decode_slice_with_len(buf: &[u8]) -> Result<Option<(usize, Packet)>, Error> {
     let mut offset = 0;
     if let Some((header, remaining_len)) = read_header(buf, &mut offset)? {

@@ -1,37 +1,5 @@
 use super::{Error, Packet};
 
-/// Encode a [Packet] enum into a [BufMut] buffer.
-///
-/// ```
-/// # use mqttrs::*;
-/// # use bytes::*;
-/// // Instantiate a `Packet` to encode.
-/// let packet = Publish {
-///    dup: false,
-///    qospid: QosPid::AtMostOnce,
-///    retain: false,
-///    topic_name: "test",
-///    payload: b"hello",
-/// }.into();
-///
-/// // Allocate buffer (should be appropriately-sized or able to grow as needed).
-/// let mut buf = [0u8; 1024];
-///
-/// // Write bytes corresponding to `&Packet` into the `BytesMut`.
-/// let len = encode_slice(&packet, &mut buf).expect("failed encoding");
-/// assert_eq!(&buf[..len], &[0b00110000, 11,
-///                     0, 4, 't' as u8, 'e' as u8, 's' as u8, 't' as u8,
-///                    'h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8]);
-/// ```
-///
-/// [Packet]: ../enum.Packet.html
-/// [BufMut]: https://docs.rs/bytes/1.0.0/bytes/trait.BufMut.html
-// #[cfg(feature = "std")]
-// pub fn encode_slice(packet: &Packet, buf: impl BufMut) -> Result<usize, Error> {
-//     let mut offset = 0;
-//     encode_slice(packet, buf.bytes_mut(), &mut offset)
-// }
-
 pub fn encode_slice(packet: &Packet, buf: &mut [u8]) -> Result<usize, Error> {
     let mut offset = 0;
 

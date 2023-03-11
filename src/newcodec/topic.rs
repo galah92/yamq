@@ -50,15 +50,6 @@ pub enum TopicLevel<'a> {
     MultiLevelWildcard,
 }
 
-impl<'a> TopicLevel<'a> {
-    pub fn has_leading_dollar(&self) -> bool {
-        match self {
-            TopicLevel::Concrete(level_str) => level_str.starts_with('$'),
-            TopicLevel::SingleLevelWildcard | TopicLevel::MultiLevelWildcard => false,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum TopicParseError {
     EmptyTopic,
@@ -252,31 +243,6 @@ pub struct TopicLevels<'a> {
     levels_iter: std::str::Split<'a, char>,
 }
 
-impl<'a> TopicFilter {
-    fn filter(&'a self) -> &'a str {
-        match self {
-            TopicFilter::Concrete { filter, .. } => filter,
-            TopicFilter::Wildcard { filter, .. } => filter,
-            TopicFilter::SharedConcrete { filter, .. } => filter,
-            TopicFilter::SharedWildcard { filter, .. } => filter,
-        }
-    }
-
-    pub fn levels(&'a self) -> TopicLevels<'a> {
-        TopicLevels {
-            levels_iter: self.filter().split(TOPIC_SEPARATOR),
-        }
-    }
-}
-
-impl<'a> Topic {
-    pub fn levels(&'a self) -> TopicLevels<'a> {
-        TopicLevels {
-            levels_iter: self.topic_name.split(TOPIC_SEPARATOR),
-        }
-    }
-}
-
 impl<'a> Iterator for TopicLevels<'a> {
     type Item = TopicLevel<'a>;
 
@@ -292,7 +258,7 @@ impl<'a> Iterator for TopicLevels<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Topic, TopicFilter, TopicLevel, TopicParseError, MAX_TOPIC_LEN_BYTES};
+    use super::{Topic, TopicFilter, TopicParseError, MAX_TOPIC_LEN_BYTES};
 
     #[test]
     fn test_topic_filter_parse_empty_topic() {
@@ -666,74 +632,5 @@ mod tests {
             "/null/byte/\0".parse::<Topic>().unwrap_err(),
             TopicParseError::WildcardOrNullInTopic,
         );
-    }
-
-    #[test]
-    fn test_topic_filter_level_iterator_simple() {
-        let filter: TopicFilter = "/".parse().unwrap();
-
-        let mut levels = filter.levels();
-
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("")));
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("")));
-        assert_eq!(levels.next(), None);
-    }
-
-    #[test]
-    fn test_topic_filter_level_iterator_concrete() {
-        let filter: TopicFilter = "home/kitchen/temperature".parse().unwrap();
-
-        let mut levels = filter.levels();
-
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("home")));
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("kitchen")));
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("temperature")));
-        assert_eq!(levels.next(), None);
-    }
-
-    #[test]
-    fn test_topic_filter_level_iterator_single_level_wildcard_1() {
-        let filter: TopicFilter = "home/+/+/temperature/+".parse().unwrap();
-
-        let mut levels = filter.levels();
-
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("home")));
-        assert_eq!(levels.next(), Some(TopicLevel::SingleLevelWildcard));
-        assert_eq!(levels.next(), Some(TopicLevel::SingleLevelWildcard));
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("temperature")));
-        assert_eq!(levels.next(), Some(TopicLevel::SingleLevelWildcard));
-        assert_eq!(levels.next(), None);
-    }
-
-    #[test]
-    fn test_topic_filter_level_iterator_single_level_wildcard_2() {
-        let filter: TopicFilter = "+".parse().unwrap();
-
-        let mut levels = filter.levels();
-
-        assert_eq!(levels.next(), Some(TopicLevel::SingleLevelWildcard));
-        assert_eq!(levels.next(), None);
-    }
-
-    #[test]
-    fn test_topic_filter_level_iterator_mutli_level_wildcard_1() {
-        let filter: TopicFilter = "home/kitchen/#".parse().unwrap();
-
-        let mut levels = filter.levels();
-
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("home")));
-        assert_eq!(levels.next(), Some(TopicLevel::Concrete("kitchen")));
-        assert_eq!(levels.next(), Some(TopicLevel::MultiLevelWildcard));
-        assert_eq!(levels.next(), None);
-    }
-
-    #[test]
-    fn test_topic_filter_level_iterator_mutli_level_wildcard_2() {
-        let filter: TopicFilter = "#".parse().unwrap();
-
-        let mut levels = filter.levels();
-
-        assert_eq!(levels.next(), Some(TopicLevel::MultiLevelWildcard));
-        assert_eq!(levels.next(), None);
     }
 }

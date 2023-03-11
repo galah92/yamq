@@ -1,29 +1,5 @@
 use super::*;
 
-/// Base enum for all MQTT packet types.
-///
-/// This is the main type you'll be interacting with, as an output of [`decode_slice()`] and an input of
-/// [`encode()`]. Most variants can be constructed directly without using methods.
-///
-/// ```
-/// # use mqttrs::*;
-/// # use core::convert::TryFrom;
-/// // Simplest form
-/// let pkt = Packet::Connack(Connack { session_present: false,
-///                                     code: ConnectReturnCode::Accepted });
-/// // Using `Into` trait
-/// let publish = Publish { dup: false,
-///                         qospid: QosPid::AtMostOnce,
-///                         retain: false,
-///                         topic_name: "to/pic",
-///                         payload: b"payload" };
-/// let pkt: Packet = publish.into();
-/// // Identifyer-only packets
-/// let pkt = Packet::Puback(Pid::try_from(42).unwrap());
-/// ```
-///
-/// [`encode()`]: fn.encode.html
-/// [`decode_slice()`]: fn.decode_slice.html
 #[derive(Debug, Clone, PartialEq)]
 pub enum Packet<'a> {
     /// [MQTT 3.1](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718028)

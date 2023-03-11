@@ -18,13 +18,13 @@ pub mod types;
 pub mod codec {
     use super::{
         decoder, encoder,
-        types::{DecodeError, EncodeError, Packet, ProtocolVersion},
+        types::{DecodeError, EncodeError, Packet, Protocol},
     };
     use bytes::BytesMut;
     use tokio_util::codec::{Decoder, Encoder};
 
     pub struct MqttCodec {
-        version: ProtocolVersion,
+        version: Protocol,
     }
 
     impl Default for MqttCodec {
@@ -36,7 +36,7 @@ pub mod codec {
     impl MqttCodec {
         pub fn new() -> Self {
             MqttCodec {
-                version: ProtocolVersion::V311,
+                version: Protocol::V311,
             }
         }
 
@@ -45,7 +45,7 @@ pub mod codec {
             let packet = decoder::decode_mqtt(buf);
 
             if let Ok(Some(Packet::Connect(packet))) = &packet {
-                self.version = packet.protocol_version;
+                self.version = packet.protocol;
             }
 
             packet

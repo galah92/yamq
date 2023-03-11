@@ -78,34 +78,6 @@ impl From<IoError> for Error {
     }
 }
 
-/// Packet Identifier.
-///
-/// For packets with [`QoS::AtLeastOne` or `QoS::ExactlyOnce`] delivery.
-///
-/// ```rust
-/// # use mqttrs::{Packet, Pid, QosPid};
-/// # use std::convert::TryFrom;
-/// #[derive(Default)]
-/// struct Session {
-///    pid: Pid,
-/// }
-/// impl Session {
-///    pub fn next_pid(&mut self) -> Pid {
-///        self.pid = self.pid + 1;
-///        self.pid
-///    }
-/// }
-///
-/// let mut sess = Session::default();
-/// assert_eq!(2, sess.next_pid().get());
-/// assert_eq!(Pid::try_from(3).unwrap(), sess.next_pid());
-/// ```
-///
-/// The spec ([MQTT-2.3.1-1], [MQTT-2.2.1-3]) disallows a pid of 0.
-///
-/// [`QoS::AtLeastOne` or `QoS::ExactlyOnce`]: enum.QoS.html
-/// [MQTT-2.3.1-1]: https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718025
-/// [MQTT-2.2.1-3]: https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901026
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "derive", derive(Serialize, Deserialize))]
 pub struct Pid(NonZeroU16);

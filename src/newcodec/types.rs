@@ -33,7 +33,7 @@ pub enum EncodeError {
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, TryFromPrimitive)]
-pub enum ProtocolVersion {
+pub enum Protocol {
     V311 = 4,
     V500 = 5,
 }
@@ -385,7 +385,7 @@ impl PacketSize for SubscriptionTopic {
 pub struct ConnectPacket {
     // Variable Header
     pub protocol_name: String,
-    pub protocol_version: ProtocolVersion,
+    pub protocol: Protocol,
     pub clean_start: bool,
     pub keep_alive: u16,
 
