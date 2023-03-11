@@ -2,13 +2,12 @@ mod codec;
 mod newcodec;
 mod topic;
 
-use bytes::BytesMut;
+use futures::{SinkExt, StreamExt};
 use newcodec::codec::MqttCodec;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio_stream::{wrappers::BroadcastStream, StreamExt, StreamMap};
-use tokio_util::codec::{Decoder, Encoder};
+use tokio_stream::{wrappers::BroadcastStream, StreamMap};
+use tokio_util::codec::Framed;
 pub use topic::TopicMatcher;
 
 pub struct Broker {
@@ -104,7 +103,7 @@ impl Broker {
 }
 
 struct Connection {
-    socket: TcpStream,
+    framed: Framed<TcpStream, MqttCodec>,
     client_tx: mpsc::Sender<ConnectionRequest>,
     subscription_streams: StreamMap<String, BroadcastStream<newcodec::types::Packet>>,
 }
@@ -121,49 +120,38 @@ enum ConnectionRequest {
 
 impl Connection {
     fn new(socket: TcpStream, client_tx: mpsc::Sender<ConnectionRequest>) -> Self {
+        let framed = Framed::new(socket, MqttCodec::new());
+        // let (writer, framed) = framed.split();
         let subscription_streams = StreamMap::new();
         Self {
-            socket,
+            framed,
             client_tx,
             subscription_streams,
         }
     }
 
     async fn run(&mut self) {
-        let mut buffer = BytesMut::new();
-        let mut codec = MqttCodec::new();
-
-        match self.socket.read_buf(&mut buffer).await {
-            Ok(0) => {
+        let _connect = match self.framed.next().await {
+            Some(Ok(newcodec::types::Packet::Connect(connect))) => connect,
+            Some(Ok(packet)) => {
+                println!("Expected connect packet, got {:?}", packet);
+                return;
+            }
+            Some(Err(err)) => {
+                println!("Error reading packet: {:?}", err);
+                return;
+            }
+            None => {
                 println!("Client disconnected");
                 return;
             }
-            Ok(_) => {}
-            Err(err) => {
-                println!("Error reading from socket: {:?}", err);
-                return;
-            }
-        }
-        let packet = match codec.decode(&mut buffer) {
-            Ok(Some(packet)) => packet,
-            Ok(None) => {
-                println!("Error decoding packet");
-                return;
-            }
-            Err(err) => {
-                println!("Error decoding packet: {:?}", err);
-                return;
-            }
         };
-        let newcodec::types::Packet::Connect(_connect) = &packet else {
-            // This is not a connect packet, disconnect the client
-            return;
-        };
+
         let connack = newcodec::types::Packet::Connack(newcodec::types::Connack {
             session_present: false, // TODO: support clean session
             code: newcodec::types::ConnectReason::Success,
         });
-        self.newsend_packet(connack).await;
+        self.framed.send(connack).await.unwrap();
 
         loop {
             tokio::select! {
@@ -171,25 +159,17 @@ impl Connection {
                     (_, packet)
                 ) = self.subscription_streams.next() => {
                     let packet = packet.unwrap();
-                    self.newsend_packet(packet).await;
+                    self.framed.send(packet).await.unwrap();
                 }
-                n = self.socket.read_buf(&mut buffer) => {
-                    match self.socket.read_buf(&mut buffer).await {
-                        Ok(0) => {
+                packet = self.framed.next() => {
+                    let packet = match packet {
+                        Some(Ok(packet)) => packet,
+                        Some(Err(err)) => {
+                            println!("Error reading packet: {:?}", err);
+                            return;
+                        }
+                        None => {
                             println!("Client disconnected");
-                            return;
-                        }
-                        Ok(_) => {}
-                        Err(err) => {
-                            println!("Error reading from socket: {:?}", err);
-                            return;
-                        }
-                    }
-                    let packet = match codec.decode(&mut buffer) {
-                        Ok(Some(packet)) => packet,
-                        Ok(None) => continue, // The packet is incomplete, wait for more data
-                        Err(err) => {
-                            println!("Error decoding packet: {:?}", err);
                             return;
                         }
                     };
@@ -215,7 +195,7 @@ impl Connection {
                         let pid = publish.pid.unwrap();
                         let puback = newcodec::types::Puback { pid };
                         let puback = newcodec::types::Packet::Puback(puback);
-                        self.newsend_packet(puback).await;
+                        self.framed.send(puback).await.unwrap();
                     }
                     newcodec::types::QoS::ExactlyOnce => {
                         // We do not support QoS 2, disconnect the client
@@ -253,11 +233,11 @@ impl Connection {
                 let pid = subscribe.pid;
                 let return_codes = topics
                     .iter()
-                    .map(|topic| newcodec::types::SubscribeAckReason::GrantedQoSOne)
+                    .map(|_| newcodec::types::SubscribeAckReason::GrantedQoSOne)
                     .collect();
                 let suback = newcodec::types::Suback { pid, return_codes };
                 let suback = newcodec::types::Packet::Suback(suback);
-                self.newsend_packet(suback).await;
+                self.framed.send(suback).await.unwrap();
             }
             newcodec::types::Packet::Unsubscribe(unsubscribe) => {
                 let topics = &unsubscribe.topics;
@@ -280,11 +260,11 @@ impl Connection {
                 let pid = unsubscribe.pid;
                 let unsuback = newcodec::types::Unsuback { pid };
                 let unsuback = newcodec::types::Packet::Unsuback(unsuback);
-                self.newsend_packet(unsuback).await;
+                self.framed.send(unsuback).await.unwrap();
             }
             newcodec::types::Packet::Pingreq => {
                 let pingresp = newcodec::types::Packet::Pingresp;
-                self.newsend_packet(pingresp).await;
+                self.framed.send(pingresp).await.unwrap();
             }
             p => {
                 // We do not support other incoming packets, disconnect the client
@@ -293,12 +273,5 @@ impl Connection {
             }
         }
         Some(())
-    }
-
-    async fn newsend_packet(&mut self, packet: newcodec::types::Packet) {
-        let mut codec = MqttCodec::new();
-        let mut buffer = BytesMut::new();
-        codec.encode(packet, &mut buffer).unwrap();
-        self.socket.write_all(&buffer).await.unwrap();
     }
 }
