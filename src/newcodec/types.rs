@@ -14,10 +14,6 @@ pub enum DecodeError {
     InvalidQoS,
     InvalidRetainHandling,
     InvalidConnectReason,
-    InvalidPublishAckReason,
-    InvalidPublishReceivedReason,
-    InvalidPublishReleaseReason,
-    InvalidPublishCompleteReason,
     InvalidSubscribeAckReason,
     InvalidUnsubscribeAckReason,
     InvalidTopic(TopicParseError),
@@ -231,48 +227,6 @@ pub enum ConnectReason {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
-pub enum PublishAckReason {
-    Success = 0,
-    NoMatchingSubscribers = 16,
-    UnspecifiedError = 128,
-    ImplementationSpecificError = 131,
-    NotAuthorized = 135,
-    TopicNameInvalid = 144,
-    PacketIdentifierInUse = 145,
-    QuotaExceeded = 151,
-    PayloadFormatInvalid = 153,
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
-pub enum PublishReceivedReason {
-    Success = 0,
-    NoMatchingSubscribers = 16,
-    UnspecifiedError = 128,
-    ImplementationSpecificError = 131,
-    NotAuthorized = 135,
-    TopicNameInvalid = 144,
-    PacketIdentifierInUse = 145,
-    QuotaExceeded = 151,
-    PayloadFormatInvalid = 153,
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
-pub enum PublishReleaseReason {
-    Success = 0,
-    PacketIdentifierNotFound = 146,
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
-pub enum PublishCompleteReason {
-    Success = 0,
-    PacketIdentifierNotFound = 146,
-}
-
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive)]
 pub enum SubscribeAckReason {
     GrantedQoSZero = 0,
@@ -429,28 +383,24 @@ impl From<FinalWill> for Publish {
 pub struct Puback {
     // Variable header
     pub packet_id: u16,
-    pub reason_code: PublishAckReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pubrec {
     // Variable header
     pub packet_id: u16,
-    pub reason_code: PublishReceivedReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pubrel {
     // Variable header
     pub packet_id: u16,
-    pub reason_code: PublishReleaseReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pubcomp {
     // Variable header
     pub packet_id: u16,
-    pub reason_code: PublishCompleteReason,
 }
 
 #[derive(Debug, PartialEq, Eq)]

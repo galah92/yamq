@@ -2,8 +2,7 @@ use super::{
     topic::Topic,
     types::{
         Connack, Connect, ConnectReason, DecodeError, FinalWill, Packet, PacketType, Protocol,
-        Puback, Pubcomp, Publish, PublishAckReason, PublishCompleteReason, PublishReceivedReason,
-        PublishReleaseReason, Pubrec, Pubrel, QoS, RetainHandling, Suback, Subscribe,
+        Puback, Pubcomp, Publish, Pubrec, Pubrel, QoS, RetainHandling, Suback, Subscribe,
         SubscribeAckReason, SubscriptionTopic, Unsuback, Unsubscribe, UnsubscribeAckReason,
     },
 };
@@ -250,104 +249,30 @@ fn decode_publish(
     Ok(Some(Packet::Publish(packet)))
 }
 
-fn decode_publish_ack(
-    bytes: &mut Cursor<&mut BytesMut>,
-    remaining_packet_length: u32,
-) -> Result<Option<Packet>, DecodeError> {
+fn decode_publish_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-
-    if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishAck(Puback {
-            packet_id,
-            reason_code: PublishAckReason::Success,
-        })));
-    }
-
-    let reason_code_byte = read_u8!(bytes);
-    let reason_code = PublishAckReason::try_from(reason_code_byte)
-        .map_err(|_| DecodeError::InvalidPublishAckReason)?;
-
-    let packet = Puback {
-        packet_id,
-        reason_code,
-    };
-
-    Ok(Some(Packet::PublishAck(packet)))
+    Ok(Some(Packet::PublishAck(Puback { packet_id })))
 }
 
 fn decode_publish_received(
     bytes: &mut Cursor<&mut BytesMut>,
-    remaining_packet_length: u32,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-
-    if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishReceived(Pubrec {
-            packet_id,
-            reason_code: PublishReceivedReason::Success,
-        })));
-    }
-
-    let reason_code_byte = read_u8!(bytes);
-    let reason_code = PublishReceivedReason::try_from(reason_code_byte)
-        .map_err(|_| DecodeError::InvalidPublishReceivedReason)?;
-
-    let packet = Pubrec {
-        packet_id,
-        reason_code,
-    };
-
-    Ok(Some(Packet::PublishReceived(packet)))
+    Ok(Some(Packet::PublishReceived(Pubrec { packet_id })))
 }
 
 fn decode_publish_release(
     bytes: &mut Cursor<&mut BytesMut>,
-    remaining_packet_length: u32,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-
-    if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishRelease(Pubrel {
-            packet_id,
-            reason_code: PublishReleaseReason::Success,
-        })));
-    }
-
-    let reason_code_byte = read_u8!(bytes);
-    let reason_code = PublishReleaseReason::try_from(reason_code_byte)
-        .map_err(|_| DecodeError::InvalidPublishReleaseReason)?;
-
-    let packet = Pubrel {
-        packet_id,
-        reason_code,
-    };
-
-    Ok(Some(Packet::PublishRelease(packet)))
+    Ok(Some(Packet::PublishRelease(Pubrel { packet_id })))
 }
 
 fn decode_publish_complete(
     bytes: &mut Cursor<&mut BytesMut>,
-    remaining_packet_length: u32,
 ) -> Result<Option<Packet>, DecodeError> {
     let packet_id = read_u16!(bytes);
-
-    if remaining_packet_length == 2 {
-        return Ok(Some(Packet::PublishComplete(Pubcomp {
-            packet_id,
-            reason_code: PublishCompleteReason::Success,
-        })));
-    }
-
-    let reason_code_byte = read_u8!(bytes);
-    let reason_code = PublishCompleteReason::try_from(reason_code_byte)
-        .map_err(|_| DecodeError::InvalidPublishCompleteReason)?;
-
-    let packet = Pubcomp {
-        packet_id,
-        reason_code,
-    };
-
-    Ok(Some(Packet::PublishComplete(packet)))
+    Ok(Some(Packet::PublishComplete(Pubcomp { packet_id })))
 }
 
 fn decode_subscribe(
@@ -525,10 +450,10 @@ fn decode_packet(
         PacketType::Connect => decode_connect(bytes),
         PacketType::ConnectAck => decode_connect_ack(bytes),
         PacketType::Publish => decode_publish(bytes, first_byte, remaining_packet_length),
-        PacketType::PublishAck => decode_publish_ack(bytes, remaining_packet_length),
-        PacketType::PublishReceived => decode_publish_received(bytes, remaining_packet_length),
-        PacketType::PublishRelease => decode_publish_release(bytes, remaining_packet_length),
-        PacketType::PublishComplete => decode_publish_complete(bytes, remaining_packet_length),
+        PacketType::PublishAck => decode_publish_ack(bytes),
+        PacketType::PublishReceived => decode_publish_received(bytes),
+        PacketType::PublishRelease => decode_publish_release(bytes),
+        PacketType::PublishComplete => decode_publish_complete(bytes),
         PacketType::Subscribe => decode_subscribe(bytes, remaining_packet_length),
         PacketType::SubscribeAck => decode_subscribe_ack(bytes, remaining_packet_length),
         PacketType::Unsubscribe => decode_unsubscribe(bytes, remaining_packet_length),

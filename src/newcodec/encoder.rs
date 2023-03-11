@@ -262,10 +262,7 @@ mod tests {
 
     #[test]
     fn publish_ack_roundtrip() {
-        let packet = Packet::PublishAck(Puback {
-            packet_id: 1500,
-            reason_code: PublishAckReason::Success,
-        });
+        let packet = Packet::PublishAck(Puback { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -276,10 +273,7 @@ mod tests {
 
     #[test]
     fn publish_received_roundtrip() {
-        let packet = Packet::PublishReceived(Pubrec {
-            packet_id: 1500,
-            reason_code: PublishReceivedReason::Success,
-        });
+        let packet = Packet::PublishReceived(Pubrec { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -290,10 +284,7 @@ mod tests {
 
     #[test]
     fn publish_release_roundtrip() {
-        let packet = Packet::PublishRelease(Pubrel {
-            packet_id: 1500,
-            reason_code: PublishReleaseReason::Success,
-        });
+        let packet = Packet::PublishRelease(Pubrel { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
@@ -304,10 +295,7 @@ mod tests {
 
     #[test]
     fn publish_complete_roundtrip() {
-        let packet = Packet::PublishComplete(Pubcomp {
-            packet_id: 1500,
-            reason_code: PublishCompleteReason::Success,
-        });
+        let packet = Packet::PublishComplete(Pubcomp { packet_id: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
