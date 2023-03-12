@@ -1,7 +1,7 @@
 use super::{
     topic::Topic,
     types::{
-        Connack, Connect, ConnectReason, DecodeError, FinalWill, Packet, PacketType, Protocol,
+        Connack, Connect, ConnectCode, DecodeError, FinalWill, Packet, PacketType, Protocol,
         Puback, Pubcomp, Publish, Pubrec, Pubrel, QoS, RetainHandling, Suback, Subscribe,
         SubscribeAckReason, SubscriptionTopic, Unsuback, Unsubscribe, UnsubscribeAckReason,
     },
@@ -196,7 +196,7 @@ fn decode_connect_ack(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet
 
     let reason_code_byte = read_u8!(bytes);
     let reason_code =
-        ConnectReason::try_from(reason_code_byte).map_err(|_| DecodeError::InvalidConnectReason)?;
+        ConnectCode::try_from(reason_code_byte).map_err(|_| DecodeError::InvalidConnectReason)?;
 
     let packet = Connack {
         session_present,

@@ -1,4 +1,3 @@
-mod codec;
 mod newcodec;
 mod topic;
 
@@ -127,7 +126,7 @@ impl Connection {
     }
 
     async fn run(&mut self) {
-        let _connect = match self.framed.next().await {
+        let connect = match self.framed.next().await {
             Some(Ok(newcodec::Packet::Connect(connect))) => connect,
             Some(Ok(packet)) => {
                 println!("Expected connect packet, got {:?}", packet);
@@ -143,9 +142,18 @@ impl Connection {
             }
         };
 
+        if connect.protocol != newcodec::Protocol::V311 {
+            let connack = newcodec::Packet::Connack(newcodec::Connack {
+                session_present: false,
+                code: newcodec::ConnectCode::UnacceptableProtocol,
+            });
+            self.framed.send(connack).await.unwrap();
+            return;
+        }
+
         let connack = newcodec::Packet::Connack(newcodec::Connack {
             session_present: false, // TODO: support clean session
-            code: newcodec::ConnectReason::Success,
+            code: newcodec::ConnectCode::Accepted,
         });
         self.framed.send(connack).await.unwrap();
 

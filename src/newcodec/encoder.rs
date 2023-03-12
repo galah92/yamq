@@ -226,7 +226,7 @@ mod tests {
     fn connect_ack_roundtrip() {
         let packet = Packet::Connack(Connack {
             session_present: false,
-            code: ConnectReason::Success,
+            code: ConnectCode::Success,
         });
 
         let mut bytes = BytesMut::new();

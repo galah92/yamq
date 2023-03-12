@@ -192,29 +192,19 @@ pub enum RetainHandling {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
-pub enum ConnectReason {
-    Success = 0,
-    UnspecifiedError = 128,
-    MalformedPacket = 129,
-    ProtocolError = 130,
-    ImplementationSpecificError = 131,
-    UnsupportedProtocolVersion = 132,
-    ClientIdentifierNotValid = 133,
-    BadUserNameOrPassword = 134,
-    NotAuthorized = 135,
-    ServerUnavailable = 136,
-    ServerBusy = 137,
-    Banned = 138,
-    BadAuthenticationMethod = 140,
-    TopicNameInvalid = 144,
-    PacketTooLarge = 149,
-    QuotaExceeded = 151,
-    PayloadFormatInvalid = 153,
-    RetainNotSupported = 154,
-    QosNotSupported = 155,
-    UseAnotherServer = 156,
-    ServerMoved = 157,
-    ConnectionRateExceeded = 159,
+pub enum ConnectCode {
+    /// Connection accepted
+    Accepted = 0x00,
+    /// The Server does not support the level of the MQTT protocol requested by the Client
+    UnacceptableProtocol = 0x01,
+    /// The Client identifier is correct UTF-8 but not allowed by the Server
+    IdentifierRejected = 0x02,
+    /// The Network Connection has been made but the MQTT service is unavailable
+    ServerUnavailable = 0x03,
+    /// The data in the user name or password is malformed
+    BadUsernameOrPassword = 0x04,
+    /// The Client is not authorized to connect
+    NotAuthorized = 0x05,
 }
 
 #[repr(u8)]
@@ -332,7 +322,7 @@ pub struct Connect {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connack {
     pub session_present: bool,
-    pub code: ConnectReason,
+    pub code: ConnectCode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
