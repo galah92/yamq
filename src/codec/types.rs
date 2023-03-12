@@ -287,7 +287,6 @@ impl PacketSize for SubscriptionTopic {
 // Control Packets
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connect {
-    pub protocol_name: String,
     pub protocol: Protocol,
     pub clean_session: bool,
     pub client_id: String,
@@ -456,7 +455,7 @@ impl PacketSize for Packet {
     fn calc_size(&self) -> u32 {
         match self {
             Packet::Connect(p) => {
-                let mut size = p.protocol_name.calc_size();
+                let mut size = "MQTT".calc_size();
 
                 // Protocol level + connect flags + keep-alive
                 size += 1 + 1 + 2;

@@ -137,6 +137,10 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
     let connect_flags = read_u8!(bytes);
     let keep_alive = read_u16!(bytes);
 
+    if protocol_name != "MQTT" {
+        return Err(DecodeError::InvalidProtocolVersion);
+    }
+
     let protocol =
         Protocol::try_from(protocol_level).map_err(|_| DecodeError::InvalidProtocolVersion)?;
 
@@ -177,7 +181,6 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
     }
 
     let packet = Connect {
-        protocol_name,
         protocol,
         clean_session: clean_start,
         keep_alive,

@@ -39,7 +39,7 @@ fn encode_binary_data(value: &[u8], bytes: &mut BytesMut) {
 }
 
 fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
-    encode_string(&packet.protocol_name, bytes);
+    encode_string("MQTT", bytes);
     bytes.put_u8(packet.protocol as u8);
 
     let mut connect_flags: u8 = 0b0000_0000;
@@ -192,7 +192,6 @@ mod tests {
     #[test]
     fn connect_roundtrip() {
         let packet = Packet::Connect(Connect {
-            protocol_name: "MQTT".to_string(),
             protocol: Protocol::V311,
             clean_session: true,
             keep_alive: 200,
