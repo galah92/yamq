@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use std::str::FromStr;
 
 const TOPIC_SEPARATOR: char = '/';
@@ -18,12 +19,12 @@ pub enum TopicFilter {
 /// Cannot contain wildcards.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Topic {
-    topic_name: String,
+    topic: Bytes,
 }
 
 impl Topic {
     pub fn topic_name(&self) -> &str {
-        &self.topic_name
+        std::str::from_utf8(&self.topic).unwrap()
     }
 }
 
@@ -38,7 +39,7 @@ pub enum TopicParseError {
 
 impl std::fmt::Display for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.topic_name)
+        write!(f, "{}", self.topic_name())
     }
 }
 
@@ -94,8 +95,15 @@ impl FromStr for Topic {
     type Err = TopicParseError;
 
     fn from_str(topic: &str) -> Result<Self, Self::Err> {
-        // TODO - Consider disallowing leading $ characters
+        let topic = Bytes::from(topic.to_string());
+        Topic::try_from(topic)
+    }
+}
 
+impl TryFrom<Bytes> for Topic {
+    type Error = TopicParseError;
+
+    fn try_from(topic: Bytes) -> Result<Self, Self::Error> {
         // Topics cannot be empty
         if topic.is_empty() {
             return Err(TopicParseError::EmptyTopic);
@@ -106,23 +114,24 @@ impl FromStr for Topic {
             return Err(TopicParseError::TopicTooLong);
         }
 
+        let topic_str = std::str::from_utf8(&topic).unwrap();
+
         // Topics cannot contain wildcards or null characters
-        let topic_contains_wildcards = topic.contains(|x: char| {
+        let topic_contains_wildcards = topic_str.contains(|x: char| {
             x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD || x == '\0'
         });
-
         if topic_contains_wildcards {
             return Err(TopicParseError::WildcardOrNullInTopic);
         }
 
-        Ok(Topic {
-            topic_name: topic.to_string(),
-        })
+        Ok(Topic { topic })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+
     use super::{Topic, TopicFilter, TopicParseError, MAX_TOPIC_LEN_BYTES};
 
     #[test]
@@ -235,28 +244,28 @@ mod tests {
         assert_eq!(
             "/".parse::<Topic>().unwrap(),
             Topic {
-                topic_name: "/".to_string(),
+                topic: Bytes::from("/"),
             }
         );
 
         assert_eq!(
             "Accounts payable".parse::<Topic>().unwrap(),
             Topic {
-                topic_name: "Accounts payable".to_string(),
+                topic: Bytes::from("Accounts payable"),
             }
         );
 
         assert_eq!(
             "home/kitchen".parse::<Topic>().unwrap(),
             Topic {
-                topic_name: "home/kitchen".to_string(),
+                topic: Bytes::from("home/kitchen"),
             }
         );
 
         assert_eq!(
             "home/kitchen/temperature".parse::<Topic>().unwrap(),
             Topic {
-                topic_name: "home/kitchen/temperature".to_string(),
+                topic: Bytes::from("home/kitchen/temperature"),
             }
         );
     }

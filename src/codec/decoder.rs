@@ -8,7 +8,7 @@ use super::{
 };
 use bytes::{Buf, Bytes, BytesMut};
 use num_enum::TryFromPrimitive;
-use std::{convert::TryFrom, io::Cursor, str::FromStr};
+use std::{convert::TryFrom, io::Cursor};
 
 macro_rules! return_if_none {
     ($x: expr) => {{
@@ -152,8 +152,7 @@ fn decode_connect(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Packet>, D
     let client_id = read_string!(bytes);
 
     let will = if has_will {
-        let topic =
-            Topic::from_str(read_string!(bytes).as_str()).map_err(DecodeError::InvalidTopic)?;
+        let topic = Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopic)?;
         let payload = read_binary_data!(bytes);
 
         Some(FinalWill {
@@ -220,8 +219,7 @@ fn decode_publish(
     // Variable header start
     let start_cursor_pos = bytes.position();
 
-    let topic_str = read_string!(bytes);
-    let topic = topic_str.parse().map_err(DecodeError::InvalidTopic)?;
+    let topic = Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopic)?;
 
     let packet_id = match qos {
         QoS::AtMostOnce => None,
@@ -383,8 +381,8 @@ fn decode_unsubscribe(
 
         let start_cursor_pos = bytes.position();
 
-        let topic_str = read_string!(bytes);
-        let topic = topic_str.parse().map_err(DecodeError::InvalidTopicFilter)?;
+        let topic =
+            Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopicFilter)?;
         topics.push(topic);
 
         let end_cursor_pos = bytes.position();
