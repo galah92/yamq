@@ -55,7 +55,7 @@ trait PacketSize {
     fn calc_size(&self) -> u32;
 }
 
-pub trait Encode {
+trait Encode {
     fn encode(&self, bytes: &mut BytesMut);
 }
 
@@ -177,9 +177,9 @@ pub enum PacketType {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, TryFromPrimitive)]
 #[allow(clippy::enum_variant_names)]
 pub enum QoS {
-    AtMostOnce = 0,  // QoS 0
-    AtLeastOnce = 1, // QoS 1
-    ExactlyOnce = 2, // QoS 2
+    AtMostOnce = 0,
+    AtLeastOnce = 1,
+    ExactlyOnce = 2,
 }
 
 #[repr(u8)]

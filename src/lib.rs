@@ -3,7 +3,6 @@ mod newcodec;
 mod topic;
 
 use futures::{SinkExt, StreamExt};
-use newcodec::codec::MqttCodec;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::{wrappers::BroadcastStream, StreamMap};
@@ -14,8 +13,8 @@ pub struct Broker {
     listener: TcpListener,
     client_tx: mpsc::Sender<ConnectionRequest>,
     client_rx: mpsc::Receiver<ConnectionRequest>,
-    subscribers: TopicMatcher<broadcast::Sender<newcodec::types::Packet>>,
-    retained: TopicMatcher<newcodec::types::Publish>,
+    subscribers: TopicMatcher<broadcast::Sender<newcodec::Packet>>,
+    retained: TopicMatcher<newcodec::Publish>,
 }
 
 impl Broker {
@@ -47,7 +46,7 @@ impl Broker {
                         ConnectionRequest::Publish(publish) => {
                             for (_, tx) in self.subscribers.matches(publish.topic.topic_name()) {
                                 use broadcast::error::SendError;
-                                let publish = newcodec::types::Packet::Publish(publish.clone());
+                                let publish = newcodec::Packet::Publish(publish.clone());
                                 if let Err(SendError(err)) = tx.send(publish) {
                                     println!("{:?}", err);
                                 }
@@ -81,7 +80,7 @@ impl Broker {
                             for topic in &subscribe.subscription_topics {
                                 for (topic, publish) in self.retained.matches(&topic.topic_path) {
                                     let sub_tx = self.subscribers.get(topic).unwrap();
-                                    sub_tx.send(newcodec::types::Packet::Publish(publish.clone())).unwrap();
+                                    sub_tx.send(newcodec::Packet::Publish(publish.clone())).unwrap();
                                 }
                             }
                         }
@@ -103,36 +102,33 @@ impl Broker {
 }
 
 struct Connection {
-    framed: Framed<TcpStream, MqttCodec>,
+    framed: Framed<TcpStream, newcodec::MqttCodec>,
     client_tx: mpsc::Sender<ConnectionRequest>,
-    subscription_streams: StreamMap<String, BroadcastStream<newcodec::types::Packet>>,
+    subscription_streams: StreamMap<String, BroadcastStream<newcodec::Packet>>,
 }
 
 #[derive(Debug)]
 enum ConnectionRequest {
-    Publish(newcodec::types::Publish),
+    Publish(newcodec::Publish),
     Subscribe(
-        newcodec::types::Subscribe,
-        oneshot::Sender<Vec<(String, BroadcastStream<newcodec::types::Packet>)>>,
+        newcodec::Subscribe,
+        oneshot::Sender<Vec<(String, BroadcastStream<newcodec::Packet>)>>,
     ),
-    Unsubscribe(newcodec::types::Unsubscribe),
+    Unsubscribe(newcodec::Unsubscribe),
 }
 
 impl Connection {
     fn new(socket: TcpStream, client_tx: mpsc::Sender<ConnectionRequest>) -> Self {
-        let framed = Framed::new(socket, MqttCodec::new());
-        // let (writer, framed) = framed.split();
-        let subscription_streams = StreamMap::new();
         Self {
-            framed,
+            framed: Framed::new(socket, newcodec::MqttCodec),
             client_tx,
-            subscription_streams,
+            subscription_streams: StreamMap::new(),
         }
     }
 
     async fn run(&mut self) {
         let _connect = match self.framed.next().await {
-            Some(Ok(newcodec::types::Packet::Connect(connect))) => connect,
+            Some(Ok(newcodec::Packet::Connect(connect))) => connect,
             Some(Ok(packet)) => {
                 println!("Expected connect packet, got {:?}", packet);
                 return;
@@ -147,9 +143,9 @@ impl Connection {
             }
         };
 
-        let connack = newcodec::types::Packet::Connack(newcodec::types::Connack {
+        let connack = newcodec::Packet::Connack(newcodec::Connack {
             session_present: false, // TODO: support clean session
-            code: newcodec::types::ConnectReason::Success,
+            code: newcodec::ConnectReason::Success,
         });
         self.framed.send(connack).await.unwrap();
 
@@ -183,21 +179,21 @@ impl Connection {
         }
     }
 
-    async fn handle_packet(&mut self, packet: newcodec::types::Packet) -> Option<()> {
+    async fn handle_packet(&mut self, packet: newcodec::Packet) -> Option<()> {
         match packet {
-            newcodec::types::Packet::Disconnect => {
+            newcodec::Packet::Disconnect => {
                 return None;
             }
-            newcodec::types::Packet::Publish(publish) => {
+            newcodec::Packet::Publish(publish) => {
                 match publish.qos {
-                    newcodec::types::QoS::AtMostOnce => (),
-                    newcodec::types::QoS::AtLeastOnce => {
+                    newcodec::QoS::AtMostOnce => (),
+                    newcodec::QoS::AtLeastOnce => {
                         let pid = publish.pid.unwrap();
-                        let puback = newcodec::types::Puback { pid };
-                        let puback = newcodec::types::Packet::Puback(puback);
+                        let puback = newcodec::Puback { pid };
+                        let puback = newcodec::Packet::Puback(puback);
                         self.framed.send(puback).await.unwrap();
                     }
-                    newcodec::types::QoS::ExactlyOnce => {
+                    newcodec::QoS::ExactlyOnce => {
                         // We do not support QoS 2, disconnect the client
                         return None;
                     }
@@ -210,7 +206,7 @@ impl Connection {
                     println!("Ignoring duplicate publish packet");
                 }
             }
-            newcodec::types::Packet::Subscribe(subscribe) => {
+            newcodec::Packet::Subscribe(subscribe) => {
                 let topics = &subscribe.subscription_topics;
 
                 if topics.is_empty() {
@@ -233,13 +229,13 @@ impl Connection {
                 let pid = subscribe.pid;
                 let return_codes = topics
                     .iter()
-                    .map(|_| newcodec::types::SubscribeAckReason::GrantedQoSOne)
+                    .map(|_| newcodec::SubscribeAckReason::GrantedQoSOne)
                     .collect();
-                let suback = newcodec::types::Suback { pid, return_codes };
-                let suback = newcodec::types::Packet::Suback(suback);
+                let suback = newcodec::Suback { pid, return_codes };
+                let suback = newcodec::Packet::Suback(suback);
                 self.framed.send(suback).await.unwrap();
             }
-            newcodec::types::Packet::Unsubscribe(unsubscribe) => {
+            newcodec::Packet::Unsubscribe(unsubscribe) => {
                 let topics = &unsubscribe.topics;
 
                 if topics.is_empty() {
@@ -258,12 +254,12 @@ impl Connection {
 
                 // Send unsuback
                 let pid = unsubscribe.pid;
-                let unsuback = newcodec::types::Unsuback { pid };
-                let unsuback = newcodec::types::Packet::Unsuback(unsuback);
+                let unsuback = newcodec::Unsuback { pid };
+                let unsuback = newcodec::Packet::Unsuback(unsuback);
                 self.framed.send(unsuback).await.unwrap();
             }
-            newcodec::types::Packet::Pingreq => {
-                let pingresp = newcodec::types::Packet::Pingresp;
+            newcodec::Packet::Pingreq => {
+                let pingresp = newcodec::Packet::Pingresp;
                 self.framed.send(pingresp).await.unwrap();
             }
             p => {

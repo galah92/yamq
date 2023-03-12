@@ -1,8 +1,12 @@
-use super::{
-    MAX_TOPIC_LEN_BYTES, MULTI_LEVEL_WILDCARD, MULTI_LEVEL_WILDCARD_STR,
-    SHARED_SUBSCRIPTION_PREFIX, SINGLE_LEVEL_WILDCARD, SINGLE_LEVEL_WILDCARD_STR, TOPIC_SEPARATOR,
-};
 use std::str::FromStr;
+
+const TOPIC_SEPARATOR: char = '/';
+const MULTI_LEVEL_WILDCARD: char = '#';
+const MULTI_LEVEL_WILDCARD_STR: &str = "#";
+const SINGLE_LEVEL_WILDCARD: char = '+';
+const SINGLE_LEVEL_WILDCARD_STR: &str = "+";
+const SHARED_SUBSCRIPTION_PREFIX: &str = "$share/";
+const MAX_TOPIC_LEN_BYTES: usize = 65_535;
 
 /// A filter for subscribers to indicate which topics they want
 /// to receive messages from. Can contain wildcards.
