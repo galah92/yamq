@@ -28,18 +28,13 @@ fn encode_variable_int(value: u32, bytes: &mut BytesMut) -> usize {
     byte_counter
 }
 
-fn encode_string(value: &str, bytes: &mut BytesMut) {
-    bytes.put_u16(value.len() as u16);
-    bytes.put_slice(value.as_bytes());
-}
-
-fn encode_binary_data(value: &[u8], bytes: &mut BytesMut) {
+fn put_delimited_u16(bytes: &mut BytesMut, value: &[u8]) {
     bytes.put_u16(value.len() as u16);
     bytes.put_slice(value);
 }
 
 fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
-    encode_string("MQTT", bytes);
+    put_delimited_u16(bytes, "MQTT".as_bytes());
     bytes.put_u8(packet.protocol as u8);
 
     let mut connect_flags: u8 = 0b0000_0000;
@@ -69,19 +64,19 @@ fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
     bytes.put_u8(connect_flags);
     bytes.put_u16(packet.keep_alive);
 
-    encode_string(&packet.client_id, bytes);
+    put_delimited_u16(bytes, packet.client_id.as_bytes());
 
     if let Some(will) = &packet.will {
-        encode_string(&will.topic, bytes);
-        encode_binary_data(&will.payload, bytes);
+        put_delimited_u16(bytes, will.topic.as_bytes());
+        put_delimited_u16(bytes, &will.payload);
     }
 
     if let Some(user_name) = &packet.username {
-        encode_string(user_name, bytes);
+        put_delimited_u16(bytes, user_name.as_bytes());
     }
 
     if let Some(password) = &packet.password {
-        encode_string(password, bytes);
+        put_delimited_u16(bytes, password.as_bytes());
     }
 }
 
@@ -96,7 +91,7 @@ fn encode_connect_ack(packet: &Connack, bytes: &mut BytesMut) {
 }
 
 fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
-    encode_string(&packet.topic, bytes);
+    put_delimited_u16(bytes, packet.topic.as_bytes());
 
     if let Some(packet_id) = packet.pid {
         bytes.put_u16(packet_id);
@@ -125,7 +120,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
-        encode_string(&topic.topic_path, bytes);
+        put_delimited_u16(bytes, topic.topic_path.as_bytes());
 
         let qos_byte = (topic.qos as u8) & 0b0000_0011;
         bytes.put_u8(qos_byte);
@@ -144,7 +139,7 @@ fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.topics {
-        encode_string(topic, bytes);
+        put_delimited_u16(bytes, topic.as_bytes());
     }
 }
 
