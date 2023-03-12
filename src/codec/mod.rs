@@ -3,6 +3,7 @@ mod encoder;
 mod topic;
 mod types;
 
+pub use topic::Topic;
 pub use types::*;
 
 use bytes::BytesMut;

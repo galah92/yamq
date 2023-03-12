@@ -273,7 +273,7 @@ impl PacketSize for FinalWill {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubscriptionTopic {
-    pub topic_path: String,
+    pub topic_path: Topic,
     pub topic_filter: TopicFilter,
     pub qos: QoS,
 }

@@ -96,7 +96,7 @@ fn encode_connect_ack(packet: &Connack, bytes: &mut BytesMut) {
 }
 
 fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
-    encode_string(&packet.topic.to_string(), bytes);
+    encode_string(&packet.topic, bytes);
 
     if let Some(packet_id) = packet.pid {
         bytes.put_u16(packet_id);
@@ -125,7 +125,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
-        encode_string(&topic.topic_path.to_string(), bytes);
+        encode_string(&topic.topic_path, bytes);
 
         let qos_byte = (topic.qos as u8) & 0b0000_0011;
         bytes.put_u8(qos_byte);
@@ -143,8 +143,8 @@ fn encode_subscribe_ack(packet: &Suback, bytes: &mut BytesMut) {
 fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
-    for topic_filter in &packet.topics {
-        encode_string(&topic_filter.to_string(), bytes);
+    for topic in &packet.topics {
+        encode_string(topic, bytes);
     }
 }
 
@@ -184,6 +184,8 @@ pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
 
 #[cfg(test)]
 mod tests {
+    use crate::codec::Topic;
+
     use super::super::{decoder::*, encoder::*, types::*};
     use bytes::BytesMut;
 
@@ -292,7 +294,7 @@ mod tests {
             pid: 4500,
 
             subscription_topics: vec![SubscriptionTopic {
-                topic_path: "test_topic".to_string(),
+                topic_path: Topic::try_from("test_topic").unwrap(),
                 topic_filter: "test_topic".to_string().parse().unwrap(),
                 qos: QoS::AtLeastOnce,
             }],

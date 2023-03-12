@@ -298,7 +298,8 @@ fn decode_subscribe(
 
         let start_cursor_pos = bytes.position();
 
-        let topic_filter_str = read_string!(bytes);
+        let topic_filter_str =
+            Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopic)?;
         let topic_filter = topic_filter_str
             .parse()
             .map_err(DecodeError::InvalidTopicFilter)?;
@@ -556,7 +557,7 @@ mod tests {
         let subscribe = Packet::Subscribe(Subscribe {
             pid: 1,
             subscription_topics: vec![SubscriptionTopic {
-                topic_path: "test".into(),
+                topic_path: Topic::try_from("test").unwrap(),
                 topic_filter: TopicFilter::Concrete,
                 qos: QoS::AtMostOnce,
             }],

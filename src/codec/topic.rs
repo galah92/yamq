@@ -50,6 +50,15 @@ impl TryFrom<Bytes> for Topic {
     }
 }
 
+impl TryFrom<&str> for Topic {
+    type Error = TopicParseError;
+
+    fn try_from(topic: &str) -> Result<Self, Self::Error> {
+        let topic = Bytes::from(topic.to_string());
+        Topic::try_from(topic)
+    }
+}
+
 impl FromStr for Topic {
     type Err = TopicParseError;
 

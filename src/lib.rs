@@ -112,7 +112,7 @@ enum ConnectionRequest {
     Publish(codec::Publish),
     Subscribe(
         codec::Subscribe,
-        oneshot::Sender<Vec<(String, BroadcastStream<codec::Packet>)>>,
+        oneshot::Sender<Vec<(codec::Topic, BroadcastStream<codec::Packet>)>>,
     ),
     Unsubscribe(codec::Unsubscribe),
 }
@@ -231,7 +231,7 @@ impl Connection {
                 // Wait for the broker to ack the subscription
                 let res = req_rx.await.unwrap();
                 for (topic, stream) in res {
-                    self.subscription_streams.insert(topic, stream);
+                    self.subscription_streams.insert(topic.to_string(), stream);
                 }
 
                 // Send suback
