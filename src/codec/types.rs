@@ -131,7 +131,8 @@ impl<T: PacketSize> PacketSize for Option<T> {
 
 impl PacketSize for Topic {
     fn calc_size(&self) -> u32 {
-        self.topic_name().calc_size()
+        let topic: &str = self;
+        topic.calc_size()
     }
 }
 

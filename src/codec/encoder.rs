@@ -72,7 +72,7 @@ fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
     encode_string(&packet.client_id, bytes);
 
     if let Some(will) = &packet.will {
-        encode_string(will.topic.topic_name(), bytes);
+        encode_string(&will.topic, bytes);
         encode_binary_data(&will.payload, bytes);
     }
 

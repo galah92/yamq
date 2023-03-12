@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use std::str::FromStr;
+use std::{borrow::Borrow, ops::Deref, str::FromStr};
 
 const TOPIC_SEPARATOR: char = '/';
 const MULTI_LEVEL_WILDCARD: char = '#';
@@ -22,9 +22,60 @@ pub struct Topic {
     topic: Bytes,
 }
 
-impl Topic {
-    pub fn topic_name(&self) -> &str {
+impl TryFrom<Bytes> for Topic {
+    type Error = TopicParseError;
+
+    fn try_from(topic: Bytes) -> Result<Self, Self::Error> {
+        // Topics cannot be empty
+        if topic.is_empty() {
+            return Err(TopicParseError::EmptyTopic);
+        }
+
+        // Topics cannot exceed the byte length in the MQTT spec
+        if topic.len() > MAX_TOPIC_LEN_BYTES {
+            return Err(TopicParseError::TopicTooLong);
+        }
+
+        let topic_str = std::str::from_utf8(&topic).unwrap();
+
+        // Topics cannot contain wildcards or null characters
+        let topic_contains_wildcards = topic_str.contains(|x: char| {
+            x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD || x == '\0'
+        });
+        if topic_contains_wildcards {
+            return Err(TopicParseError::WildcardOrNullInTopic);
+        }
+
+        Ok(Topic { topic })
+    }
+}
+
+impl FromStr for Topic {
+    type Err = TopicParseError;
+
+    fn from_str(topic: &str) -> Result<Self, Self::Err> {
+        let topic = Bytes::from(topic.to_string());
+        Topic::try_from(topic)
+    }
+}
+
+impl Deref for Topic {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
         std::str::from_utf8(&self.topic).unwrap()
+    }
+}
+
+impl Borrow<str> for &Topic {
+    fn borrow(&self) -> &str {
+        self.deref()
+    }
+}
+
+impl From<Topic> for String {
+    fn from(val: Topic) -> Self {
+        val.deref().to_string()
     }
 }
 
@@ -39,7 +90,7 @@ pub enum TopicParseError {
 
 impl std::fmt::Display for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.topic_name())
+        write!(f, "{}", self.deref())
     }
 }
 
@@ -88,43 +139,6 @@ impl FromStr for TopicFilter {
         } else {
             Ok(TopicFilter::Concrete)
         }
-    }
-}
-
-impl FromStr for Topic {
-    type Err = TopicParseError;
-
-    fn from_str(topic: &str) -> Result<Self, Self::Err> {
-        let topic = Bytes::from(topic.to_string());
-        Topic::try_from(topic)
-    }
-}
-
-impl TryFrom<Bytes> for Topic {
-    type Error = TopicParseError;
-
-    fn try_from(topic: Bytes) -> Result<Self, Self::Error> {
-        // Topics cannot be empty
-        if topic.is_empty() {
-            return Err(TopicParseError::EmptyTopic);
-        }
-
-        // Topics cannot exceed the byte length in the MQTT spec
-        if topic.len() > MAX_TOPIC_LEN_BYTES {
-            return Err(TopicParseError::TopicTooLong);
-        }
-
-        let topic_str = std::str::from_utf8(&topic).unwrap();
-
-        // Topics cannot contain wildcards or null characters
-        let topic_contains_wildcards = topic_str.contains(|x: char| {
-            x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD || x == '\0'
-        });
-        if topic_contains_wildcards {
-            return Err(TopicParseError::WildcardOrNullInTopic);
-        }
-
-        Ok(Topic { topic })
     }
 }
 

@@ -43,7 +43,7 @@ impl Broker {
                 req = self.client_rx.recv() => {
                     match req.unwrap() {
                         ConnectionRequest::Publish(publish) => {
-                            for (_, tx) in self.subscribers.matches(publish.topic.topic_name()) {
+                            for (_, tx) in self.subscribers.matches(&publish.topic) {
                                 use broadcast::error::SendError;
                                 let publish = codec::Packet::Publish(publish.clone());
                                 if let Err(SendError(err)) = tx.send(publish) {
@@ -54,10 +54,11 @@ impl Broker {
                             if publish.retain {
                                 if publish.payload.is_empty() {
                                     // [MQTT-3.3.1-6] Remove retained message
-                                    self.retained.remove(publish.topic.topic_name());
+                                    self.retained.remove(&publish.topic);
                                 } else {
                                     // [MQTT-3.3.1-5] Store retained message
-                                    self.retained.insert(publish.topic.topic_name(), publish.clone());
+                                    let topic = publish.topic.clone();
+                                    self.retained.insert(topic, publish.clone());
                                 }
                             }
                         }
@@ -86,9 +87,9 @@ impl Broker {
                         ConnectionRequest::Unsubscribe(unsubscribe) => {
                             // Remove subscriptions that are no longer used
                             for topic in &unsubscribe.topics {
-                                if let Some(sub_tx) = self.subscribers.get(topic.topic_name()) {
+                                if let Some(sub_tx) = self.subscribers.get(topic) {
                                     if sub_tx.receiver_count() == 0 {
-                                        self.subscribers.remove(topic.topic_name());
+                                        self.subscribers.remove(topic);
                                     }
                                 }
                             }
@@ -253,7 +254,8 @@ impl Connection {
 
                 // Remove the subscription streams
                 for topic in topics {
-                    self.subscription_streams.remove(topic.topic_name());
+                    let topic: &str = topic;
+                    self.subscription_streams.remove(topic);
                 }
 
                 // Send to broker
