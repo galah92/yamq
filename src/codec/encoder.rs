@@ -127,22 +127,8 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     for topic in &packet.subscription_topics {
         encode_string(&topic.topic_path.to_string(), bytes);
 
-        let mut options_byte = 0b0000_0000;
-        let retain_handling_byte = topic.retain_handling as u8;
-        options_byte |= (retain_handling_byte & 0b0000_0011) << 4;
-
-        if topic.retain_as_published {
-            options_byte |= 0b0000_1000;
-        }
-
-        if topic.no_local {
-            options_byte |= 0b0000_0100;
-        }
-
-        let qos_byte = topic.maximum_qos as u8;
-        options_byte |= qos_byte & 0b0000_0011;
-
-        bytes.put_u8(options_byte);
+        let qos_byte = (topic.qos as u8) & 0b0000_0011;
+        bytes.put_u8(qos_byte);
     }
 }
 
@@ -308,10 +294,7 @@ mod tests {
             subscription_topics: vec![SubscriptionTopic {
                 topic_path: "test_topic".to_string(),
                 topic_filter: "test_topic".to_string().parse().unwrap(),
-                maximum_qos: QoS::AtLeastOnce,
-                no_local: false,
-                retain_as_published: false,
-                retain_handling: RetainHandling::SendAtSubscribeTime,
+                qos: QoS::AtLeastOnce,
             }],
         });
 

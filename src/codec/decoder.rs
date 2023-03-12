@@ -1,12 +1,13 @@
 use super::{
     topic::Topic,
     types::{
-        Connack, Connect, ConnectCode, DecodeError, FinalWill, Packet, PacketType, Protocol,
-        Puback, Pubcomp, Publish, Pubrec, Pubrel, QoS, RetainHandling, Suback, Subscribe,
-        SubscribeAckReason, SubscriptionTopic, Unsuback, Unsubscribe, UnsubscribeAckReason,
+        Connack, Connect, ConnectCode, DecodeError, FinalWill, Packet, Protocol, Puback, Pubcomp,
+        Publish, Pubrec, Pubrel, QoS, Suback, Subscribe, SubscribeAckReason, SubscriptionTopic,
+        Unsuback, Unsubscribe, UnsubscribeAckReason,
     },
 };
 use bytes::{Buf, Bytes, BytesMut};
+use num_enum::TryFromPrimitive;
 use std::{convert::TryFrom, io::Cursor, str::FromStr};
 
 macro_rules! return_if_none {
@@ -305,24 +306,13 @@ fn decode_subscribe(
             .map_err(DecodeError::InvalidTopicFilter)?;
 
         let options_byte = read_u8!(bytes);
-
-        let maximum_qos_val = options_byte & 0b0000_0011;
-        let maximum_qos = QoS::try_from(maximum_qos_val).map_err(|_| DecodeError::InvalidQoS)?;
-
-        let retain_handling_val = (options_byte & 0b0011_0000) >> 4;
-        let retain_handling = RetainHandling::try_from(retain_handling_val)
-            .map_err(|_| DecodeError::InvalidRetainHandling)?;
-
-        let retain_as_published = (options_byte & 0b0000_1000) == 0b0000_1000;
-        let no_local = (options_byte & 0b0000_0100) == 0b0000_0100;
+        let qos_val = options_byte & 0b0000_0011;
+        let qos = QoS::try_from(qos_val).map_err(|_| DecodeError::InvalidQoS)?;
 
         let subscription_topic = SubscriptionTopic {
             topic_path: topic_filter_str,
             topic_filter,
-            maximum_qos,
-            no_local,
-            retain_as_published,
-            retain_handling,
+            qos,
         };
 
         subscription_topics.push(subscription_topic);
@@ -434,6 +424,25 @@ fn decode_unsubscribe_ack(
     let packet = Unsuback { pid: packet_id };
 
     Ok(Some(Packet::Unsuback(packet)))
+}
+
+#[repr(u8)]
+#[derive(Debug, TryFromPrimitive)]
+pub enum PacketType {
+    Connect = 1,
+    ConnectAck = 2,
+    Publish = 3,
+    PublishAck = 4,
+    PublishReceived = 5,
+    PublishRelease = 6,
+    PublishComplete = 7,
+    Subscribe = 8,
+    SubscribeAck = 9,
+    Unsubscribe = 10,
+    UnsubscribeAck = 11,
+    PingRequest = 12,
+    PingResponse = 13,
+    Disconnect = 14,
 }
 
 fn decode_packet(
@@ -551,10 +560,7 @@ mod tests {
             subscription_topics: vec![SubscriptionTopic {
                 topic_path: "test".into(),
                 topic_filter: TopicFilter::Concrete,
-                maximum_qos: QoS::AtMostOnce,
-                no_local: false,
-                retain_as_published: false,
-                retain_handling: RetainHandling::SendAtSubscribeTime,
+                qos: QoS::AtMostOnce,
             }],
         });
         let decoded = decode_mqtt(&mut without_subscription_identifier)
