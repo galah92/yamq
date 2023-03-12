@@ -1,26 +1,22 @@
 use bytes::Bytes;
-use std::{borrow::Borrow, ops::Deref, str::FromStr};
+use std::{ops::Deref, str::FromStr};
 
 const TOPIC_SEPARATOR: char = '/';
 const MULTI_LEVEL_WILDCARD: char = '#';
 const SINGLE_LEVEL_WILDCARD: char = '+';
 const MAX_TOPIC_LEN_BYTES: usize = 65_535;
 
-/// A filter for subscribers to indicate which topics they want
-/// to receive messages from. Can contain wildcards.
-/// Shared topic filter example: $share/group_name_a/home/kitchen/temperature
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TopicFilter {
-    Concrete,
-    Wildcard,
+#[derive(Debug, PartialEq, Eq)]
+pub enum TopicParseError {
+    EmptyTopic,
+    TopicTooLong,
+    MultilevelWildcardNotAtEnd,
+    InvalidWildcardLevel,
+    WildcardOrNullInTopic,
 }
 
-/// A topic name publishers use when sending MQTT messages.
-/// Cannot contain wildcards.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Topic {
-    topic: Bytes,
-}
+pub struct Topic(Bytes);
 
 impl TryFrom<Bytes> for Topic {
     type Error = TopicParseError;
@@ -46,7 +42,7 @@ impl TryFrom<Bytes> for Topic {
             return Err(TopicParseError::WildcardOrNullInTopic);
         }
 
-        Ok(Topic { topic })
+        Ok(Topic(topic))
     }
 }
 
@@ -72,13 +68,7 @@ impl Deref for Topic {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        std::str::from_utf8(&self.topic).unwrap()
-    }
-}
-
-impl Borrow<str> for &Topic {
-    fn borrow(&self) -> &str {
-        self.deref()
+        std::str::from_utf8(&self.0).unwrap()
     }
 }
 
@@ -88,19 +78,16 @@ impl From<Topic> for String {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum TopicParseError {
-    EmptyTopic,
-    TopicTooLong,
-    MultilevelWildcardNotAtEnd,
-    InvalidWildcardLevel,
-    WildcardOrNullInTopic,
-}
-
 impl std::fmt::Display for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.deref())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TopicFilter {
+    Concrete,
+    Wildcard,
 }
 
 impl FromStr for TopicFilter {
@@ -264,32 +251,21 @@ mod tests {
 
     #[test]
     fn test_topic_name_success() {
-        assert_eq!(
-            "/".parse::<Topic>().unwrap(),
-            Topic {
-                topic: Bytes::from("/"),
-            }
-        );
+        assert_eq!("/".parse::<Topic>().unwrap(), Topic(Bytes::from("/")));
 
         assert_eq!(
             "Accounts payable".parse::<Topic>().unwrap(),
-            Topic {
-                topic: Bytes::from("Accounts payable"),
-            }
+            Topic(Bytes::from("Accounts payable"))
         );
 
         assert_eq!(
             "home/kitchen".parse::<Topic>().unwrap(),
-            Topic {
-                topic: Bytes::from("home/kitchen"),
-            }
+            Topic(Bytes::from("home/kitchen"))
         );
 
         assert_eq!(
             "home/kitchen/temperature".parse::<Topic>().unwrap(),
-            Topic {
-                topic: Bytes::from("home/kitchen/temperature"),
-            }
+            Topic(Bytes::from("home/kitchen/temperature"))
         );
     }
 
