@@ -125,7 +125,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
-        encode_string(&&topic.topic_path.to_string(), bytes);
+        encode_string(&topic.topic_path.to_string(), bytes);
 
         let mut options_byte = 0b0000_0000;
         let retain_handling_byte = topic.retain_handling as u8;
@@ -226,7 +226,7 @@ mod tests {
     fn connect_ack_roundtrip() {
         let packet = Packet::Connack(Connack {
             session_present: false,
-            code: ConnectCode::Success,
+            code: ConnectCode::Accepted,
         });
 
         let mut bytes = BytesMut::new();

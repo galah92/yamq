@@ -139,8 +139,8 @@ impl FromStr for TopicFilter {
             }
         }
 
-        let topic_filter = if let Some((group_name, shared_filter)) = shared_group {
-            let (level_count, contains_wildcards) = process_filter(shared_filter)?;
+        let topic_filter = if let Some((_, shared_filter)) = shared_group {
+            let (_, contains_wildcards) = process_filter(shared_filter)?;
 
             if contains_wildcards {
                 TopicFilter::SharedWildcard
@@ -148,7 +148,7 @@ impl FromStr for TopicFilter {
                 TopicFilter::SharedConcrete
             }
         } else {
-            let (level_count, contains_wildcards) = process_filter(filter)?;
+            let (_, contains_wildcards) = process_filter(filter)?;
 
             if contains_wildcards {
                 TopicFilter::Wildcard
