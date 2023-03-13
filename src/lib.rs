@@ -53,16 +53,12 @@ mod tests {
 
         client.publish("testtopic", "testdata".into()).await;
 
-        let published = client.read().await;
+        let message = client.read().await;
 
         assert_eq!(
-            published,
-            codec::Publish {
-                dup: false,
-                qos: codec::QoS::AtMostOnce,
-                retain: false,
+            message,
+            client::Message {
                 topic: codec::Topic::try_from("testtopic").unwrap(),
-                pid: None,
                 payload: "testdata".into(),
             }
         );
