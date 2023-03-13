@@ -1,6 +1,8 @@
+mod client;
 mod codec;
 mod topic;
 
+pub use client::Client;
 use futures::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -311,27 +313,15 @@ mod tests {
         let address = broker.address();
         tokio::spawn(async move { broker.run().await });
 
-        let stream = TcpStream::connect(address).await?;
-        let mut framed = Framed::new(stream, codec::MqttCodec);
+        let mut client = Client::new(&address).await;
 
-        let connect = codec::Packet::Connect(codec::Connect {
-            protocol: codec::Protocol::V311,
-            keep_alive: 0,
-            client_id: "test".to_string(),
-            clean_session: true,
-            will: None,
-            username: None,
-            password: None,
-        });
-        framed.send(connect).await.unwrap();
-
-        let connack = framed.next().await.unwrap().unwrap();
+        let connack = client.connect().await;
         assert_eq!(
             connack,
-            codec::Packet::Connack(codec::Connack {
+            codec::Connack {
                 session_present: false,
                 code: codec::ConnectCode::Accepted
-            })
+            }
         );
 
         Ok(())
@@ -344,31 +334,11 @@ mod tests {
         let address = broker.address();
         tokio::spawn(async move { broker.run().await });
 
-        let stream = TcpStream::connect(address).await?;
-        let mut framed = Framed::new(stream, codec::MqttCodec);
+        let mut client = Client::new(&address).await;
 
-        let connect = codec::Packet::Connect(codec::Connect {
-            protocol: codec::Protocol::V311,
-            keep_alive: 0,
-            client_id: "test".to_string(),
-            clean_session: true,
-            will: None,
-            username: None,
-            password: None,
-        });
-        framed.send(connect.clone()).await.unwrap();
+        let _connack = client.connect().await;
 
-        let _connack = framed.next().await.unwrap().unwrap();
-
-        let publish = codec::Packet::Publish(codec::Publish {
-            dup: false,
-            qos: codec::QoS::AtMostOnce,
-            retain: false,
-            topic: codec::Topic::try_from("test").unwrap(),
-            pid: None,
-            payload: "test".into(),
-        });
-        framed.send(publish).await.unwrap();
+        client.publish("testtopic", "testdata".into()).await;
 
         Ok(())
     }
@@ -380,39 +350,17 @@ mod tests {
         let address = broker.address();
         tokio::spawn(async move { broker.run().await });
 
-        let stream = TcpStream::connect(address).await?;
-        let mut framed = Framed::new(stream, codec::MqttCodec);
+        let mut client = Client::new(&address).await;
 
-        let connect = codec::Packet::Connect(codec::Connect {
-            protocol: codec::Protocol::V311,
-            keep_alive: 0,
-            client_id: "test".to_string(),
-            clean_session: true,
-            will: None,
-            username: None,
-            password: None,
-        });
-        framed.send(connect.clone()).await.unwrap();
+        let _connack = client.connect().await;
 
-        let _connack = framed.next().await.unwrap().unwrap();
-
-        let subscribe = codec::Packet::Subscribe(codec::Subscribe {
-            pid: 1,
-            subscription_topics: vec![codec::SubscriptionTopic {
-                topic_path: codec::Topic::try_from("test").unwrap(),
-                topic_filter: codec::TopicFilter::Concrete,
-                qos: codec::QoS::AtMostOnce,
-            }],
-        });
-        framed.send(subscribe).await.unwrap();
-
-        let suback = framed.next().await.unwrap().unwrap();
+        let suback = client.subscribe("testtopic").await;
         assert_eq!(
             suback,
-            codec::Packet::Suback(codec::Suback {
+            codec::Suback {
                 pid: 1,
                 return_codes: vec![codec::SubscribeAckReason::GrantedQoSOne]
-            })
+            }
         );
 
         Ok(())
@@ -425,46 +373,26 @@ mod tests {
         let address = broker.address();
         tokio::spawn(async move { broker.run().await });
 
-        let stream = TcpStream::connect(address).await?;
-        let mut framed = Framed::new(stream, codec::MqttCodec);
+        let mut client = Client::new(&address).await;
 
-        let connect = codec::Packet::Connect(codec::Connect {
-            protocol: codec::Protocol::V311,
-            keep_alive: 0,
-            client_id: "test".to_string(),
-            clean_session: true,
-            will: None,
-            username: None,
-            password: None,
-        });
-        framed.send(connect.clone()).await.unwrap();
+        let _connack = client.connect().await;
+        let _suback = client.subscribe("testtopic").await;
 
-        let _connack = framed.next().await.unwrap().unwrap();
+        client.publish("testtopic", "testdata".into()).await;
 
-        let subscribe = codec::Packet::Subscribe(codec::Subscribe {
-            pid: 1,
-            subscription_topics: vec![codec::SubscriptionTopic {
-                topic_path: codec::Topic::try_from("test").unwrap(),
-                topic_filter: codec::TopicFilter::Concrete,
+        let published = client.recv().await;
+
+        assert_eq!(
+            published,
+            codec::Packet::Publish(codec::Publish {
+                dup: false,
                 qos: codec::QoS::AtMostOnce,
-            }],
-        });
-        framed.send(subscribe).await.unwrap();
-
-        let _suback = framed.next().await.unwrap().unwrap();
-
-        let publish = codec::Packet::Publish(codec::Publish {
-            dup: false,
-            qos: codec::QoS::AtMostOnce,
-            retain: false,
-            topic: codec::Topic::try_from("test").unwrap(),
-            pid: None,
-            payload: "test".into(),
-        });
-        framed.send(publish.clone()).await.unwrap();
-
-        let publish_got = framed.next().await.unwrap().unwrap();
-        assert_eq!(publish_got, publish);
+                retain: false,
+                topic: codec::Topic::try_from("testtopic").unwrap(),
+                pid: None,
+                payload: "testdata".into(),
+            })
+        );
 
         Ok(())
     }
