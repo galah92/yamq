@@ -9,6 +9,7 @@ pub struct Client {
     sender: SplitSink<Framed<TcpStream, codec::MqttCodec>, codec::Packet>,
     publish_receiver: mpsc::UnboundedReceiver<codec::Publish>,
     suback_receiver: mpsc::UnboundedReceiver<codec::Suback>,
+    unsuback_receiver: mpsc::UnboundedReceiver<codec::Unsuback>,
 }
 
 impl Client {
@@ -18,6 +19,7 @@ impl Client {
         let (mut sender, mut receiver) = framed.split();
         let (publish_sender, publish_receiver) = mpsc::unbounded_channel();
         let (suback_sender, suback_receiver) = mpsc::unbounded_channel();
+        let (unsuback_sender, unsuback_receiver) = mpsc::unbounded_channel();
 
         let connect = codec::Connect {
             protocol: codec::Protocol::V311,
@@ -49,6 +51,9 @@ impl Client {
                     codec::Packet::Suback(suback) => {
                         suback_sender.send(suback).unwrap();
                     }
+                    codec::Packet::Unsuback(unsuback) => {
+                        unsuback_sender.send(unsuback).unwrap();
+                    }
                     _ => {}
                 }
             }
@@ -58,6 +63,7 @@ impl Client {
             sender,
             publish_receiver,
             suback_receiver,
+            unsuback_receiver,
         }
     }
 
@@ -88,6 +94,18 @@ impl Client {
 
         let suback = self.suback_receiver.recv().await.unwrap();
         assert_eq!(suback.pid, 1);
+    }
+
+    pub async fn unsubscribe(&mut self, topic: &str) {
+        let unsubscribe = codec::Unsubscribe {
+            pid: 1,
+            topics: vec![codec::Topic::try_from(topic).unwrap()],
+        };
+        let unsubscribe = codec::Packet::Unsubscribe(unsubscribe);
+        self.sender.send(unsubscribe).await.unwrap();
+
+        let unsuback = self.unsuback_receiver.recv().await.unwrap();
+        assert_eq!(unsuback.pid, 1);
     }
 
     pub async fn read(&mut self) -> codec::Publish {
