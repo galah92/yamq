@@ -153,10 +153,7 @@ impl Connection {
                 println!("Error reading packet: {:?}", err);
                 return;
             }
-            None => {
-                println!("Client disconnected");
-                return;
-            }
+            None => return, // Client disconnected
         };
 
         if connect.protocol != codec::Protocol::V311 {
@@ -189,10 +186,7 @@ impl Connection {
                             println!("Error reading packet: {:?}", err);
                             return;
                         }
-                        None => {
-                            println!("Client disconnected");
-                            return;
-                        }
+                        None => return, // Client disconnected
                     };
                     match self.handle_packet(packet).await {
                         Some(()) => (),
