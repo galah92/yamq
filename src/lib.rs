@@ -53,15 +53,9 @@ mod tests {
 
         client.publish("testtopic", "testdata".into()).await;
 
-        let message = client.read().await;
-
-        assert_eq!(
-            message,
-            client::Message {
-                topic: codec::Topic::try_from("testtopic").unwrap(),
-                payload: "testdata".into(),
-            }
-        );
+        let (topic, payload) = client.read().await;
+        assert_eq!(topic, codec::Topic::try_from("testtopic").unwrap());
+        assert_eq!(payload, "testdata");
 
         Ok(())
     }

@@ -108,17 +108,8 @@ impl Client {
         assert_eq!(unsuback.pid, 1);
     }
 
-    pub async fn read(&mut self) -> Message {
+    pub async fn read(&mut self) -> (codec::Topic, Bytes) {
         let publish = self.publish_receiver.recv().await.unwrap();
-        Message {
-            topic: publish.topic,
-            payload: publish.payload,
-        }
+        (publish.topic, publish.payload)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Message {
-    pub topic: codec::Topic,
-    pub payload: Bytes,
 }
