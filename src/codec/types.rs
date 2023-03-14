@@ -11,7 +11,7 @@ pub enum DecodeError {
     #[error("invalid remaining length")]
     InvalidRemainingLength,
     #[error("invalid utf8")]
-    InvalidUtf8,
+    InvalidUtf8(#[from] std::string::FromUtf8Error),
     #[error("invalid qos")]
     InvalidQoS,
     #[error("invalid connect reason")]

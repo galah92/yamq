@@ -94,13 +94,12 @@ fn decode_string(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<String>, De
     let position = bytes.position() as usize;
 
     // TODO - Use Cow<str> and from_utf8_lossy later for less copying
-    match String::from_utf8(bytes.get_ref()[position..(position + str_size_bytes)].into()) {
-        Ok(string) => {
+    String::from_utf8(bytes.get_ref()[position..(position + str_size_bytes)].into())
+        .map(|string| {
             bytes.advance(str_size_bytes);
-            Ok(Some(string))
-        }
-        Err(_) => Err(DecodeError::InvalidUtf8),
-    }
+            Some(string)
+        })
+        .map_err(DecodeError::InvalidUtf8)
 }
 
 fn decode_binary_data(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<Bytes>, DecodeError> {
