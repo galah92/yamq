@@ -1,5 +1,5 @@
 use super::{
-    topic::Topic,
+    topic::{Topic, TopicFilter},
     types::{
         Connack, Connect, ConnectCode, DecodeError, FinalWill, Packet, Protocol, Puback, Pubcomp,
         Publish, Pubrec, Pubrel, QoS, Suback, Subscribe, SubscribeAckReason, SubscriptionTopic,
@@ -300,22 +300,14 @@ fn decode_subscribe(
 
         let start_cursor_pos = bytes.position();
 
-        let topic_filter_str =
-            Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopic)?;
-        let topic_filter = topic_filter_str
-            .as_ref()
-            .parse()
+        let topic_filter = TopicFilter::try_from(read_binary_data!(bytes))
             .map_err(DecodeError::InvalidTopicFilter)?;
 
         let options_byte = read_u8!(bytes);
         let qos_val = options_byte & 0b0000_0011;
         let qos = QoS::try_from(qos_val).map_err(|_| DecodeError::InvalidQoS)?;
 
-        let subscription_topic = SubscriptionTopic {
-            topic_path: topic_filter_str,
-            topic_filter,
-            qos,
-        };
+        let subscription_topic = SubscriptionTopic { topic_filter, qos };
 
         subscription_topics.push(subscription_topic);
 
@@ -385,8 +377,8 @@ fn decode_unsubscribe(
 
         let start_cursor_pos = bytes.position();
 
-        let topic =
-            Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopicFilter)?;
+        let topic = TopicFilter::try_from(read_binary_data!(bytes))
+            .map_err(DecodeError::InvalidTopicFilter)?;
         topics.push(topic);
 
         let end_cursor_pos = bytes.position();
@@ -560,8 +552,7 @@ mod tests {
         let subscribe = Packet::Subscribe(Subscribe {
             pid: 1,
             subscription_topics: vec![SubscriptionTopic {
-                topic_path: Topic::try_from("test")?,
-                topic_filter: TopicFilter::Concrete,
+                topic_filter: TopicFilter::try_from("test")?,
                 qos: QoS::AtMostOnce,
             }],
         });

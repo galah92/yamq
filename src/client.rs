@@ -88,8 +88,7 @@ impl Client {
         let subscribe = codec::Subscribe {
             pid: 1,
             subscription_topics: vec![codec::SubscriptionTopic {
-                topic_path: codec::Topic::try_from(topic)?,
-                topic_filter: codec::TopicFilter::Concrete,
+                topic_filter: codec::TopicFilter::try_from(topic)?,
                 qos: codec::QoS::AtMostOnce,
             }],
         };
@@ -103,7 +102,7 @@ impl Client {
     pub async fn unsubscribe(&mut self, topic: &str) -> Result<(), UnsubscribeError> {
         let unsubscribe = codec::Unsubscribe {
             pid: 1,
-            topics: vec![codec::Topic::try_from(topic)?],
+            topics: vec![codec::TopicFilter::try_from(topic)?],
         };
         let unsubscribe = codec::Packet::Unsubscribe(unsubscribe);
         self.sender.send(unsubscribe).await?;
@@ -142,8 +141,8 @@ pub enum PublishError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubscribeError {
-    #[error("topic parse error: {0}")]
-    Decode(#[from] codec::TopicParseError),
+    #[error("topic filter parse error: {0}")]
+    Decode(#[from] codec::TopicFilterParseError),
     #[error("decode error: {0}")]
     Encode(#[from] codec::EncodeError),
     #[error("suback not received")]
@@ -152,8 +151,8 @@ pub enum SubscribeError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum UnsubscribeError {
-    #[error("topic parse error: {0}")]
-    Decode(#[from] codec::TopicParseError),
+    #[error("topic filter parse error: {0}")]
+    Decode(#[from] codec::TopicFilterParseError),
     #[error("decode error: {0}")]
     Encode(#[from] codec::EncodeError),
     #[error("unsuback not received")]

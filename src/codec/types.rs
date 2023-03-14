@@ -1,4 +1,4 @@
-use super::topic::{Topic, TopicFilter, TopicParseError};
+use super::topic::{Topic, TopicFilter, TopicFilterParseError, TopicParseError};
 use bytes::{Bytes, BytesMut};
 use num_enum::TryFromPrimitive;
 
@@ -23,7 +23,7 @@ pub enum DecodeError {
     #[error("invalid topic")]
     InvalidTopic(TopicParseError),
     #[error("invalid topic filter")]
-    InvalidTopicFilter(TopicParseError),
+    InvalidTopicFilter(TopicFilterParseError),
     #[error("io error")]
     Io(#[from] std::io::Error),
 }
@@ -137,7 +137,6 @@ impl<T: PacketSize> PacketSize for Option<T> {
 
 impl PacketSize for Topic {
     fn calc_size(&self) -> u32 {
-        // let topic: &str = self;
         self.as_ref().calc_size()
     }
 }
@@ -150,7 +149,7 @@ impl PacketSize for Vec<Topic> {
 
 impl PacketSize for TopicFilter {
     fn calc_size(&self) -> u32 {
-        0
+        self.as_ref().calc_size()
     }
 }
 
@@ -279,14 +278,13 @@ impl PacketSize for FinalWill {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubscriptionTopic {
-    pub topic_path: Topic,
     pub topic_filter: TopicFilter,
     pub qos: QoS,
 }
 
 impl PacketSize for SubscriptionTopic {
     fn calc_size(&self) -> u32 {
-        self.topic_path.calc_size() + self.topic_filter.calc_size() + 1
+        self.topic_filter.calc_size() + 1
     }
 }
 
@@ -370,7 +368,7 @@ pub struct Suback {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unsubscribe {
     pub pid: u16,
-    pub topics: Vec<Topic>,
+    pub topics: Vec<TopicFilter>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

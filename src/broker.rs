@@ -81,13 +81,13 @@ impl Broker {
             .subscription_topics
             .iter()
             .map(|topic| {
-                if let Some(sub_tx) = self.subscribers.get(topic.topic_path.as_ref()) {
+                if let Some(sub_tx) = self.subscribers.get(topic.topic_filter.as_ref()) {
                     let sub_rx = sub_tx.subscribe();
-                    (topic.topic_path.to_owned(), sub_rx.into())
+                    (topic.topic_filter.to_owned(), sub_rx.into())
                 } else {
                     let (sub_tx, sub_rx) = broadcast::channel(32);
-                    self.subscribers.insert(topic.topic_path.as_ref(), sub_tx);
-                    (topic.topic_path.to_owned(), sub_rx.into())
+                    self.subscribers.insert(topic.topic_filter.as_ref(), sub_tx);
+                    (topic.topic_filter.to_owned(), sub_rx.into())
                 }
             })
             .collect();
@@ -95,7 +95,7 @@ impl Broker {
 
         // Send retained messages
         for topic in &subscribe.subscription_topics {
-            for (topic, publish) in self.retained.matches(topic.topic_path.as_ref()) {
+            for (topic, publish) in self.retained.matches(topic.topic_filter.as_ref()) {
                 let sub_tx = self.subscribers.get(topic).unwrap();
                 sub_tx
                     .send(codec::Packet::Publish(publish.clone()))
@@ -125,7 +125,7 @@ struct Connection {
 #[derive(Debug)]
 struct SubscribeRequest {
     subscribe: codec::Subscribe,
-    res_tx: oneshot::Sender<Vec<(codec::Topic, BroadcastStream<codec::Packet>)>>,
+    res_tx: oneshot::Sender<Vec<(codec::TopicFilter, BroadcastStream<codec::Packet>)>>,
 }
 
 #[derive(Debug)]

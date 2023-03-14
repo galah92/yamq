@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use std::str::FromStr;
 
 const TOPIC_SEPARATOR: char = '/';
 const MULTI_LEVEL_WILDCARD: char = '#';
@@ -86,57 +85,117 @@ impl std::fmt::Display for Topic {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TopicFilter {
-    Concrete,
-    Wildcard,
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum TopicFilterParseError {
+    #[error("topic cannot be empty")]
+    EmptyTopicFilter,
+    #[error("topic cannot exceed 65535 bytes")]
+    TopicFilterTooLong,
+    #[error("topic cannot contain # wildcard anywhere but the last level")]
+    MultilevelWildcardNotAtEnd,
+    #[error("topic must have a wildcard in a separate level")]
+    InvalidWildcardLevel,
+    #[error("topic cannot contain wildcards or null characters")]
+    WildcardOrNullInTopicFilter,
+    #[error("topic must be valid UTF-8")]
+    Utf8Error(#[from] std::string::FromUtf8Error),
 }
 
-impl FromStr for TopicFilter {
-    type Err = TopicParseError;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopicFilter(String);
 
-    fn from_str(filter: &str) -> Result<Self, Self::Err> {
+impl TryFrom<String> for TopicFilter {
+    type Error = TopicFilterParseError;
+
+    fn try_from(filter: String) -> Result<Self, Self::Error> {
         // Filters and topics cannot be empty
         if filter.is_empty() {
-            return Err(TopicParseError::EmptyTopic);
+            return Err(TopicFilterParseError::EmptyTopicFilter);
         }
 
         // Assert no null character U+0000
         if filter.contains('\0') {
-            return Err(TopicParseError::WildcardOrNullInTopic);
+            return Err(TopicFilterParseError::WildcardOrNullInTopicFilter);
         }
 
         // Filters cannot exceed the byte length in the MQTT spec
         if filter.len() > MAX_TOPIC_LEN_BYTES {
-            return Err(TopicParseError::TopicTooLong);
+            return Err(TopicFilterParseError::TopicFilterTooLong);
         }
 
-        // Multi-level wildcards can only be at the end of the topic
+        // Multi-level wildcards can only be at the end of the topiclevel_contains_wildcard
         if let Some(pos) = filter.rfind(MULTI_LEVEL_WILDCARD) {
             if pos != filter.len() - 1 {
-                return Err(TopicParseError::MultilevelWildcardNotAtEnd);
+                return Err(TopicFilterParseError::MultilevelWildcardNotAtEnd);
             }
         }
 
-        let mut contains_wildcards = false;
         for level in filter.split(TOPIC_SEPARATOR) {
             let level_contains_wildcard =
                 level.contains(|x: char| x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD);
             if level_contains_wildcard {
                 // Any wildcards on a particular level must be specified on their own
                 if level.len() > 1 {
-                    return Err(TopicParseError::InvalidWildcardLevel);
+                    return Err(TopicFilterParseError::InvalidWildcardLevel);
                 }
-
-                contains_wildcards = true;
             }
         }
 
-        if contains_wildcards {
-            Ok(TopicFilter::Wildcard)
-        } else {
-            Ok(TopicFilter::Concrete)
-        }
+        Ok(TopicFilter(filter))
+    }
+}
+
+impl TryFrom<&str> for TopicFilter {
+    type Error = TopicFilterParseError;
+
+    fn try_from(topic: &str) -> Result<Self, Self::Error> {
+        TopicFilter::try_from(topic.to_string())
+    }
+}
+
+impl TryFrom<Bytes> for TopicFilter {
+    type Error = TopicFilterParseError;
+
+    fn try_from(topic: Bytes) -> Result<Self, Self::Error> {
+        let topic = String::from_utf8(topic.to_vec())?;
+        TopicFilter::try_from(topic)
+    }
+}
+
+impl From<Topic> for TopicFilter {
+    fn from(topic: Topic) -> Self {
+        TopicFilter(topic.0)
+    }
+}
+
+impl AsRef<str> for TopicFilter {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<TopicFilter> for Topic {
+    type Error = TopicParseError;
+
+    fn try_from(topic: TopicFilter) -> Result<Self, Self::Error> {
+        Topic::try_from(topic.0)
+    }
+}
+
+impl TopicFilter {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
+    pub fn is_wildcard(&self) -> bool {
+        self.0
+            .contains(|x: char| x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD)
+    }
+}
+
+impl std::fmt::Display for TopicFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
     }
 }
 
@@ -146,90 +205,71 @@ mod tests {
 
     #[test]
     fn test_topic_filter_parse_empty_topic() {
-        assert_eq!("".parse::<TopicFilter>(), Err(TopicParseError::EmptyTopic));
+        let empty = Err(TopicFilterParseError::EmptyTopicFilter);
+        assert_eq!(TopicFilter::try_from(""), empty);
     }
 
     #[test]
     fn test_topic_filter_parse_length() {
         let just_right_topic = "a".repeat(MAX_TOPIC_LEN_BYTES);
-        assert!(just_right_topic.parse::<TopicFilter>().is_ok());
+        assert!(TopicFilter::try_from(just_right_topic).is_ok());
 
         let too_long_topic = "a".repeat(MAX_TOPIC_LEN_BYTES + 1);
         assert_eq!(
-            too_long_topic.parse::<TopicFilter>(),
-            Err(TopicParseError::TopicTooLong)
+            TopicFilter::try_from(too_long_topic),
+            Err(TopicFilterParseError::TopicFilterTooLong)
         );
     }
 
     #[test]
-    fn test_topic_filter_parse_concrete() -> Result<(), TopicParseError> {
-        assert_eq!("/".parse::<TopicFilter>()?, TopicFilter::Concrete);
-        assert_eq!("a".parse::<TopicFilter>()?, TopicFilter::Concrete);
-
-        // $SYS topics can be subscribed to, but can't be published
-        assert_eq!(
-            "home/kitchen".parse::<TopicFilter>()?,
-            TopicFilter::Concrete
-        );
-
-        assert_eq!(
-            "home/kitchen/temperature".parse::<TopicFilter>()?,
-            TopicFilter::Concrete
-        );
-        assert_eq!(
-            "home/kitchen/temperature/celsius".parse::<TopicFilter>()?,
-            TopicFilter::Concrete
-        );
-
+    fn test_topic_filter_parse_concrete() -> Result<(), TopicFilterParseError> {
+        assert!(!TopicFilter::try_from("/")?.is_wildcard());
+        assert!(!TopicFilter::try_from("a")?.is_wildcard());
+        assert!(!TopicFilter::try_from("home/kitchen")?.is_wildcard());
+        assert!(!TopicFilter::try_from("home/kitchen/temperature")?.is_wildcard());
+        assert!(!TopicFilter::try_from("home/kitchen/temperature/celsius")?.is_wildcard());
         Ok(())
     }
 
     #[test]
-    fn test_topic_filter_parse_single_level_wildcard() -> Result<(), TopicParseError> {
-        assert_eq!("+".parse::<TopicFilter>()?, TopicFilter::Wildcard);
-        assert_eq!("+/".parse::<TopicFilter>()?, TopicFilter::Wildcard);
-        assert_eq!("sport/+".parse::<TopicFilter>()?, TopicFilter::Wildcard);
-        assert_eq!("/+".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+    fn test_topic_filter_parse_single_level_wildcard() -> Result<(), TopicFilterParseError> {
+        assert!(TopicFilter::try_from("+")?.is_wildcard());
+        assert!(TopicFilter::try_from("+/")?.is_wildcard());
+        assert!(TopicFilter::try_from("sport/+")?.is_wildcard());
+        assert!(TopicFilter::try_from("/+")?.is_wildcard());
         Ok(())
     }
 
     #[test]
-    fn test_topic_filter_parse_multi_level_wildcard() -> Result<(), TopicParseError> {
-        assert_eq!("#".parse::<TopicFilter>()?, TopicFilter::Wildcard);
-        assert_eq!(
-            "#/".parse::<TopicFilter>(),
-            Err(TopicParseError::MultilevelWildcardNotAtEnd)
-        );
-        assert_eq!("/#".parse::<TopicFilter>()?, TopicFilter::Wildcard);
-        assert_eq!("sport/#".parse::<TopicFilter>()?, TopicFilter::Wildcard);
-        assert_eq!(
-            "home/kitchen/temperature/#".parse::<TopicFilter>()?,
-            TopicFilter::Wildcard
-        );
+    fn test_topic_filter_parse_multi_level_wildcard() -> Result<(), TopicFilterParseError> {
+        assert!(TopicFilter::try_from("#")?.is_wildcard());
+        assert!(TopicFilter::try_from("/#")?.is_wildcard());
+        assert!(TopicFilter::try_from("sport/#")?.is_wildcard());
+        assert!(TopicFilter::try_from("home/kitchen/temperature/#")?.is_wildcard());
         Ok(())
     }
 
     #[test]
-    fn test_topic_filter_parse_invalid_filters() -> Result<(), TopicParseError> {
+    fn test_topic_filter_parse_invalid_filters() -> Result<(), TopicFilterParseError> {
         assert_eq!(
-            "sport/#/stats".parse::<TopicFilter>(),
-            Err(TopicParseError::MultilevelWildcardNotAtEnd)
+            TopicFilter::try_from("sport/#/stats"),
+            Err(TopicFilterParseError::MultilevelWildcardNotAtEnd)
         );
         assert_eq!(
-            "sport/#/stats#".parse::<TopicFilter>(),
-            Err(TopicParseError::InvalidWildcardLevel)
+            TopicFilter::try_from("sport/#/stats#"),
+            Err(TopicFilterParseError::InvalidWildcardLevel)
         );
         assert_eq!(
-            "sport#/stats#".parse::<TopicFilter>(),
-            Err(TopicParseError::InvalidWildcardLevel)
+            TopicFilter::try_from("sport#/stats#"),
+            Err(TopicFilterParseError::InvalidWildcardLevel)
         );
         assert_eq!(
-            "sport/tennis#".parse::<TopicFilter>(),
-            Err(TopicParseError::InvalidWildcardLevel)
+            TopicFilter::try_from("sport/tennis#"),
+            Err(TopicFilterParseError::InvalidWildcardLevel)
         );
         assert_eq!(
-            "sport/++".parse::<TopicFilter>(),
-            Err(TopicParseError::InvalidWildcardLevel)
+            TopicFilter::try_from("sport/++"),
+            Err(TopicFilterParseError::InvalidWildcardLevel)
         );
         Ok(())
     }

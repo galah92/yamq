@@ -120,7 +120,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
-        put_delimited_u16(bytes, topic.topic_path.as_bytes());
+        put_delimited_u16(bytes, topic.topic_filter.as_bytes());
 
         let qos_byte = (topic.qos as u8) & 0b0000_0011;
         bytes.put_u8(qos_byte);
@@ -179,7 +179,7 @@ pub fn encode_mqtt(packet: &Packet, bytes: &mut BytesMut) {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::Topic;
+    use crate::codec::{Topic, TopicFilter};
 
     use super::super::{decoder::*, encoder::*, types::*};
     use bytes::BytesMut;
@@ -295,8 +295,7 @@ mod tests {
             pid: 4500,
 
             subscription_topics: vec![SubscriptionTopic {
-                topic_path: Topic::try_from("test_topic")?,
-                topic_filter: "test_topic".to_string().parse()?,
+                topic_filter: TopicFilter::try_from("test_topic")?,
                 qos: QoS::AtLeastOnce,
             }],
         });
@@ -329,7 +328,7 @@ mod tests {
     fn unsubscribe_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Unsubscribe(Unsubscribe {
             pid: 1234,
-            topics: vec![Topic::try_from("test_topic")?],
+            topics: vec![TopicFilter::try_from("test_topic")?],
         });
 
         let mut bytes = BytesMut::new();

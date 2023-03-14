@@ -3,7 +3,7 @@ mod encoder;
 mod topic;
 mod types;
 
-pub use topic::{Topic, TopicFilter, TopicParseError};
+pub use topic::{Topic, TopicFilter, TopicFilterParseError, TopicParseError};
 pub use types::*;
 
 use bytes::BytesMut;
