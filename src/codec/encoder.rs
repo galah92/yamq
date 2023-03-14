@@ -227,7 +227,7 @@ mod tests {
             qos: QoS::AtLeastOnce,
             retain: false,
 
-            topic: "test_topic".parse()?,
+            topic: Topic::try_from("test_topic")?,
             pid: Some(42),
 
             payload: vec![22; 100].into(),
@@ -329,7 +329,7 @@ mod tests {
     fn unsubscribe_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Unsubscribe(Unsubscribe {
             pid: 1234,
-            topics: vec!["test_topic".parse()?],
+            topics: vec![Topic::try_from("test_topic")?],
         });
 
         let mut bytes = BytesMut::new();

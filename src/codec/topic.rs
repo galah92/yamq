@@ -53,21 +53,20 @@ impl TryFrom<Bytes> for Topic {
     }
 }
 
-impl TryFrom<&str> for Topic {
+impl TryFrom<String> for Topic {
     type Error = TopicParseError;
 
-    fn try_from(topic: &str) -> Result<Self, Self::Error> {
-        let topic = Bytes::from(topic.to_string());
+    fn try_from(topic: String) -> Result<Self, Self::Error> {
+        let topic = Bytes::from(topic);
         Topic::try_from(topic)
     }
 }
 
-impl FromStr for Topic {
-    type Err = TopicParseError;
+impl TryFrom<&str> for Topic {
+    type Error = TopicParseError;
 
-    fn from_str(topic: &str) -> Result<Self, Self::Err> {
-        let topic = Bytes::from(topic.to_string());
-        Topic::try_from(topic)
+    fn try_from(topic: &str) -> Result<Self, Self::Error> {
+        Topic::try_from(topic.to_string())
     }
 }
 
@@ -242,12 +241,12 @@ mod tests {
     #[test]
     fn test_topic_name_failure() -> Result<(), TopicParseError> {
         let err = Err(TopicParseError::WildcardOrNullInTopic);
-        assert_eq!("#".parse::<Topic>(), err);
-        assert_eq!("+".parse::<Topic>(), err);
-        assert_eq!("\0".parse::<Topic>(), err);
-        assert_eq!("/multi/level/#".parse::<Topic>(), err);
-        assert_eq!("/single/level/+".parse::<Topic>(), err);
-        assert_eq!("/null/byte/\0".parse::<Topic>(), err);
+        assert_eq!(Topic::try_from("#"), err);
+        assert_eq!(Topic::try_from("+"), err);
+        assert_eq!(Topic::try_from("\0"), err);
+        assert_eq!(Topic::try_from("/multi/level/#"), err);
+        assert_eq!(Topic::try_from("/single/level/+"), err);
+        assert_eq!(Topic::try_from("/null/byte/\0"), err);
         Ok(())
     }
 }
