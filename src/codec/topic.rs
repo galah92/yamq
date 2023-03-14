@@ -19,16 +19,16 @@ pub enum TopicParseError {
     #[error("topic cannot contain wildcards or null characters")]
     WildcardOrNullInTopic,
     #[error("topic must be valid UTF-8")]
-    Utf8Error(#[from] std::str::Utf8Error),
+    Utf8Error(#[from] std::string::FromUtf8Error),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Topic(Bytes);
+pub struct Topic(String);
 
-impl TryFrom<Bytes> for Topic {
+impl TryFrom<String> for Topic {
     type Error = TopicParseError;
 
-    fn try_from(topic: Bytes) -> Result<Self, Self::Error> {
+    fn try_from(topic: String) -> Result<Self, Self::Error> {
         // Topics cannot be empty
         if topic.is_empty() {
             return Err(TopicParseError::EmptyTopic);
@@ -39,10 +39,8 @@ impl TryFrom<Bytes> for Topic {
             return Err(TopicParseError::TopicTooLong);
         }
 
-        let topic_str = std::str::from_utf8(&topic)?;
-
         // Topics cannot contain wildcards or null characters
-        let topic_contains_wildcards = topic_str.contains(|x: char| {
+        let topic_contains_wildcards = topic.contains(|x: char| {
             x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD || x == '\0'
         });
         if topic_contains_wildcards {
@@ -50,15 +48,6 @@ impl TryFrom<Bytes> for Topic {
         }
 
         Ok(Topic(topic))
-    }
-}
-
-impl TryFrom<String> for Topic {
-    type Error = TopicParseError;
-
-    fn try_from(topic: String) -> Result<Self, Self::Error> {
-        let topic = Bytes::from(topic);
-        Topic::try_from(topic)
     }
 }
 
@@ -70,11 +59,20 @@ impl TryFrom<&str> for Topic {
     }
 }
 
+impl TryFrom<Bytes> for Topic {
+    type Error = TopicParseError;
+
+    fn try_from(topic: Bytes) -> Result<Self, Self::Error> {
+        let topic = String::from_utf8(topic.to_vec())?;
+        Topic::try_from(topic)
+    }
+}
+
 impl Deref for Topic {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        std::str::from_utf8(&self.0).unwrap()
+        &self.0
     }
 }
 
