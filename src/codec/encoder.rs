@@ -185,7 +185,7 @@ mod tests {
     use bytes::BytesMut;
 
     #[test]
-    fn connect_roundtrip() {
+    fn connect_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Connect(Connect {
             protocol: Protocol::V311,
             clean_session: true,
@@ -199,13 +199,14 @@ mod tests {
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn connect_ack_roundtrip() {
+    fn connect_ack_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Connack(Connack {
             session_present: false,
             code: ConnectCode::Accepted,
@@ -213,19 +214,20 @@ mod tests {
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn publish_roundtrip() {
+    fn publish_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Publish(Publish {
             dup: false,
             qos: QoS::AtLeastOnce,
             retain: false,
 
-            topic: "test_topic".parse().unwrap(),
+            topic: "test_topic".parse()?,
             pid: Some(42),
 
             payload: vec![22; 100].into(),
@@ -233,76 +235,82 @@ mod tests {
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn publish_ack_roundtrip() {
+    fn publish_ack_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Puback(Puback { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn publish_received_roundtrip() {
+    fn publish_received_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Pubrec(Pubrec { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn publish_release_roundtrip() {
+    fn publish_release_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Pubrel(Pubrel { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn publish_complete_roundtrip() {
+    fn publish_complete_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Pubcomp(Pubcomp { pid: 1500 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn subscribe_roundtrip() {
+    fn subscribe_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Subscribe(Subscribe {
             pid: 4500,
 
             subscription_topics: vec![SubscriptionTopic {
-                topic_path: Topic::try_from("test_topic").unwrap(),
-                topic_filter: "test_topic".to_string().parse().unwrap(),
+                topic_path: Topic::try_from("test_topic")?,
+                topic_filter: "test_topic".to_string().parse()?,
                 qos: QoS::AtLeastOnce,
             }],
         });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn subscribe_ack_roundtrip() {
+    fn subscribe_ack_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Suback(Suback {
             pid: 1234,
 
@@ -311,63 +319,69 @@ mod tests {
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn unsubscribe_roundtrip() {
+    fn unsubscribe_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Unsubscribe(Unsubscribe {
             pid: 1234,
-            topics: vec!["test_topic".parse().unwrap()],
+            topics: vec!["test_topic".parse()?],
         });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn unsubscribe_ack_roundtrip() {
+    fn unsubscribe_ack_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Unsuback(Unsuback { pid: 4321 });
 
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn ping_request_roundtrip() {
+    fn ping_request_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Pingreq;
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn ping_response_roundtrip() {
+    fn ping_response_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Pingresp;
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 
     #[test]
-    fn disconnect_roundtrip() {
+    fn disconnect_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let packet = Packet::Disconnect;
         let mut bytes = BytesMut::new();
         encode_mqtt(&packet, &mut bytes);
-        let decoded = decode_mqtt(&mut bytes).unwrap().unwrap();
+        let decoded = decode_mqtt(&mut bytes)?;
 
-        assert_eq!(packet, decoded);
+        assert_eq!(Some(packet), decoded);
+        Ok(())
     }
 }

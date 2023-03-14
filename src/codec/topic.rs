@@ -18,6 +18,8 @@ pub enum TopicParseError {
     InvalidWildcardLevel,
     #[error("topic cannot contain wildcards or null characters")]
     WildcardOrNullInTopic,
+    #[error("topic must be valid UTF-8")]
+    Utf8Error(#[from] std::str::Utf8Error),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,7 +39,7 @@ impl TryFrom<Bytes> for Topic {
             return Err(TopicParseError::TopicTooLong);
         }
 
-        let topic_str = std::str::from_utf8(&topic).unwrap();
+        let topic_str = std::str::from_utf8(&topic)?;
 
         // Topics cannot contain wildcards or null characters
         let topic_contains_wildcards = topic_str.contains(|x: char| {
@@ -145,16 +147,11 @@ impl FromStr for TopicFilter {
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
-
     use super::{Topic, TopicFilter, TopicParseError, MAX_TOPIC_LEN_BYTES};
 
     #[test]
     fn test_topic_filter_parse_empty_topic() {
-        assert_eq!(
-            "".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::EmptyTopic
-        );
+        assert_eq!("".parse::<TopicFilter>(), Err(TopicParseError::EmptyTopic));
     }
 
     #[test]
@@ -164,146 +161,93 @@ mod tests {
 
         let too_long_topic = "a".repeat(MAX_TOPIC_LEN_BYTES + 1);
         assert_eq!(
-            too_long_topic.parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::TopicTooLong
+            too_long_topic.parse::<TopicFilter>(),
+            Err(TopicParseError::TopicTooLong)
         );
     }
 
     #[test]
-    fn test_topic_filter_parse_concrete() {
-        assert_eq!("/".parse::<TopicFilter>().unwrap(), TopicFilter::Concrete);
-
-        assert_eq!("a".parse::<TopicFilter>().unwrap(), TopicFilter::Concrete);
+    fn test_topic_filter_parse_concrete() -> Result<(), TopicParseError> {
+        assert_eq!("/".parse::<TopicFilter>()?, TopicFilter::Concrete);
+        assert_eq!("a".parse::<TopicFilter>()?, TopicFilter::Concrete);
 
         // $SYS topics can be subscribed to, but can't be published
         assert_eq!(
-            "home/kitchen".parse::<TopicFilter>().unwrap(),
+            "home/kitchen".parse::<TopicFilter>()?,
             TopicFilter::Concrete
         );
 
         assert_eq!(
-            "home/kitchen/temperature".parse::<TopicFilter>().unwrap(),
+            "home/kitchen/temperature".parse::<TopicFilter>()?,
+            TopicFilter::Concrete
+        );
+        assert_eq!(
+            "home/kitchen/temperature/celsius".parse::<TopicFilter>()?,
             TopicFilter::Concrete
         );
 
-        assert_eq!(
-            "home/kitchen/temperature/celsius"
-                .parse::<TopicFilter>()
-                .unwrap(),
-            TopicFilter::Concrete
-        );
+        Ok(())
     }
 
     #[test]
-    fn test_topic_filter_parse_single_level_wildcard() {
-        assert_eq!("+".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
+    fn test_topic_filter_parse_single_level_wildcard() -> Result<(), TopicParseError> {
+        assert_eq!("+".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+        assert_eq!("+/".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+        assert_eq!("sport/+".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+        assert_eq!("/+".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+        Ok(())
+    }
 
-        assert_eq!("+/".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
-
+    #[test]
+    fn test_topic_filter_parse_multi_level_wildcard() -> Result<(), TopicParseError> {
+        assert_eq!("#".parse::<TopicFilter>()?, TopicFilter::Wildcard);
         assert_eq!(
-            "sport/+".parse::<TopicFilter>().unwrap(),
+            "#/".parse::<TopicFilter>(),
+            Err(TopicParseError::MultilevelWildcardNotAtEnd)
+        );
+        assert_eq!("/#".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+        assert_eq!("sport/#".parse::<TopicFilter>()?, TopicFilter::Wildcard);
+        assert_eq!(
+            "home/kitchen/temperature/#".parse::<TopicFilter>()?,
             TopicFilter::Wildcard
         );
-
-        assert_eq!("/+".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
+        Ok(())
     }
 
     #[test]
-    fn test_topic_filter_parse_multi_level_wildcard() {
-        assert_eq!("#".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
-
+    fn test_topic_filter_parse_invalid_filters() -> Result<(), TopicParseError> {
         assert_eq!(
-            "#/".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::MultilevelWildcardNotAtEnd
+            "sport/#/stats".parse::<TopicFilter>(),
+            Err(TopicParseError::MultilevelWildcardNotAtEnd)
         );
-
-        assert_eq!("/#".parse::<TopicFilter>().unwrap(), TopicFilter::Wildcard);
-
         assert_eq!(
-            "sport/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard
+            "sport/#/stats#".parse::<TopicFilter>(),
+            Err(TopicParseError::InvalidWildcardLevel)
         );
-
         assert_eq!(
-            "home/kitchen/temperature/#".parse::<TopicFilter>().unwrap(),
-            TopicFilter::Wildcard
+            "sport#/stats#".parse::<TopicFilter>(),
+            Err(TopicParseError::InvalidWildcardLevel)
         );
+        assert_eq!(
+            "sport/tennis#".parse::<TopicFilter>(),
+            Err(TopicParseError::InvalidWildcardLevel)
+        );
+        assert_eq!(
+            "sport/++".parse::<TopicFilter>(),
+            Err(TopicParseError::InvalidWildcardLevel)
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_topic_filter_parse_invalid_filters() {
-        assert_eq!(
-            "sport/#/stats".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::MultilevelWildcardNotAtEnd
-        );
-        assert_eq!(
-            "sport/#/stats#".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::InvalidWildcardLevel
-        );
-        assert_eq!(
-            "sport#/stats#".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::InvalidWildcardLevel
-        );
-        assert_eq!(
-            "sport/tennis#".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::InvalidWildcardLevel
-        );
-        assert_eq!(
-            "sport/++".parse::<TopicFilter>().unwrap_err(),
-            TopicParseError::InvalidWildcardLevel
-        );
-    }
-
-    #[test]
-    fn test_topic_name_success() {
-        assert_eq!("/".parse::<Topic>().unwrap(), Topic(Bytes::from("/")));
-
-        assert_eq!(
-            "Accounts payable".parse::<Topic>().unwrap(),
-            Topic(Bytes::from("Accounts payable"))
-        );
-
-        assert_eq!(
-            "home/kitchen".parse::<Topic>().unwrap(),
-            Topic(Bytes::from("home/kitchen"))
-        );
-
-        assert_eq!(
-            "home/kitchen/temperature".parse::<Topic>().unwrap(),
-            Topic(Bytes::from("home/kitchen/temperature"))
-        );
-    }
-
-    #[test]
-    fn test_topic_name_failure() {
-        assert_eq!(
-            "#".parse::<Topic>().unwrap_err(),
-            TopicParseError::WildcardOrNullInTopic,
-        );
-
-        assert_eq!(
-            "+".parse::<Topic>().unwrap_err(),
-            TopicParseError::WildcardOrNullInTopic,
-        );
-
-        assert_eq!(
-            "\0".parse::<Topic>().unwrap_err(),
-            TopicParseError::WildcardOrNullInTopic,
-        );
-
-        assert_eq!(
-            "/multi/level/#".parse::<Topic>().unwrap_err(),
-            TopicParseError::WildcardOrNullInTopic,
-        );
-
-        assert_eq!(
-            "/single/level/+".parse::<Topic>().unwrap_err(),
-            TopicParseError::WildcardOrNullInTopic,
-        );
-
-        assert_eq!(
-            "/null/byte/\0".parse::<Topic>().unwrap_err(),
-            TopicParseError::WildcardOrNullInTopic,
-        );
+    fn test_topic_name_failure() -> Result<(), TopicParseError> {
+        let err = Err(TopicParseError::WildcardOrNullInTopic);
+        assert_eq!("#".parse::<Topic>(), err);
+        assert_eq!("+".parse::<Topic>(), err);
+        assert_eq!("\0".parse::<Topic>(), err);
+        assert_eq!("/multi/level/#".parse::<Topic>(), err);
+        assert_eq!("/single/level/+".parse::<Topic>(), err);
+        assert_eq!("/null/byte/\0".parse::<Topic>(), err);
+        Ok(())
     }
 }

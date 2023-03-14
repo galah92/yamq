@@ -550,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_subscribe() {
+    fn test_decode_subscribe() -> Result<(), Box<dyn std::error::Error>> {
         let mut without_subscription_identifier = BytesMut::from(
             [
                 0x82, 0x09, 0x00, 0x01, 0x00, 0x04, 0x74, 0x65, 0x73, 0x74, 0x00,
@@ -560,16 +560,17 @@ mod tests {
         let subscribe = Packet::Subscribe(Subscribe {
             pid: 1,
             subscription_topics: vec![SubscriptionTopic {
-                topic_path: Topic::try_from("test").unwrap(),
+                topic_path: Topic::try_from("test")?,
                 topic_filter: TopicFilter::Concrete,
                 qos: QoS::AtMostOnce,
             }],
         });
-        let decoded = decode_mqtt(&mut without_subscription_identifier)
-            .unwrap()
-            .unwrap();
-        assert_eq!(subscribe, decoded);
+        let decoded = decode_mqtt(&mut without_subscription_identifier)?;
+        assert_eq!(Some(subscribe), decoded);
+
+        Ok(())
     }
+
     #[test]
     fn test_decode_variable_int_crash() {
         let number: u32 = u32::MAX;
