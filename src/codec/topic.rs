@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use std::{ops::Deref, str::FromStr};
+use std::str::FromStr;
 
 const TOPIC_SEPARATOR: char = '/';
 const MULTI_LEVEL_WILDCARD: char = '#';
@@ -74,17 +74,9 @@ impl AsRef<str> for Topic {
     }
 }
 
-impl Deref for Topic {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl std::fmt::Display for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.deref())
+        write!(f, "{}", self.as_ref())
     }
 }
 

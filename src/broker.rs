@@ -54,7 +54,7 @@ impl Broker {
     }
 
     fn handle_publish(&mut self, publish: codec::Publish) {
-        for (_, tx) in self.subscribers.matches(&publish.topic) {
+        for (_, tx) in self.subscribers.matches(publish.topic.as_ref()) {
             use broadcast::error::SendError;
             let publish = codec::Packet::Publish(publish.clone());
             if let Err(SendError(err)) = tx.send(publish) {
@@ -65,7 +65,7 @@ impl Broker {
         if publish.retain {
             if publish.payload.is_empty() {
                 // [MQTT-3.3.1-6] Remove retained message
-                self.retained.remove(&publish.topic);
+                self.retained.remove(publish.topic.as_ref());
             } else {
                 // [MQTT-3.3.1-5] Store retained message
                 let topic = publish.topic.clone();
@@ -81,7 +81,7 @@ impl Broker {
             .subscription_topics
             .iter()
             .map(|topic| {
-                if let Some(sub_tx) = self.subscribers.get(&topic.topic_path) {
+                if let Some(sub_tx) = self.subscribers.get(topic.topic_path.as_ref()) {
                     let sub_rx = sub_tx.subscribe();
                     (topic.topic_path.to_owned(), sub_rx.into())
                 } else {
@@ -95,7 +95,7 @@ impl Broker {
 
         // Send retained messages
         for topic in &subscribe.subscription_topics {
-            for (topic, publish) in self.retained.matches(&topic.topic_path) {
+            for (topic, publish) in self.retained.matches(topic.topic_path.as_ref()) {
                 let sub_tx = self.subscribers.get(topic).unwrap();
                 sub_tx
                     .send(codec::Packet::Publish(publish.clone()))
@@ -107,9 +107,9 @@ impl Broker {
     fn handle_unsubscribe(&mut self, unsubscribe: codec::Unsubscribe) {
         // Remove subscriptions that are no longer used
         for topic in &unsubscribe.topics {
-            if let Some(sub_tx) = self.subscribers.get(topic) {
+            if let Some(sub_tx) = self.subscribers.get(topic.as_ref()) {
                 if sub_tx.receiver_count() == 0 {
-                    self.subscribers.remove(topic);
+                    self.subscribers.remove(topic.as_ref());
                 }
             }
         }
@@ -270,8 +270,8 @@ impl Connection {
 
                 // Remove the subscription streams
                 for topic in topics {
-                    let topic: &str = topic;
-                    self.subscription_streams.remove(topic);
+                    // let topic: &str = topic;
+                    self.subscription_streams.remove(topic.as_ref());
                 }
 
                 // Send to broker

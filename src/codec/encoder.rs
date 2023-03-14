@@ -67,7 +67,7 @@ fn encode_connect(packet: &Connect, bytes: &mut BytesMut) {
     put_delimited_u16(bytes, packet.client_id.as_bytes());
 
     if let Some(will) = &packet.will {
-        put_delimited_u16(bytes, will.topic.as_bytes());
+        put_delimited_u16(bytes, will.topic.as_ref().as_bytes());
         put_delimited_u16(bytes, &will.payload);
     }
 
@@ -91,7 +91,7 @@ fn encode_connect_ack(packet: &Connack, bytes: &mut BytesMut) {
 }
 
 fn encode_publish(packet: &Publish, bytes: &mut BytesMut) {
-    put_delimited_u16(bytes, packet.topic.as_bytes());
+    put_delimited_u16(bytes, packet.topic.as_ref().as_bytes());
 
     if let Some(packet_id) = packet.pid {
         bytes.put_u16(packet_id);
@@ -120,7 +120,7 @@ fn encode_subscribe(packet: &Subscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.subscription_topics {
-        put_delimited_u16(bytes, topic.topic_path.as_bytes());
+        put_delimited_u16(bytes, topic.topic_path.as_ref().as_bytes());
 
         let qos_byte = (topic.qos as u8) & 0b0000_0011;
         bytes.put_u8(qos_byte);
@@ -139,7 +139,7 @@ fn encode_unsubscribe(packet: &Unsubscribe, bytes: &mut BytesMut) {
     bytes.put_u16(packet.pid);
 
     for topic in &packet.topics {
-        put_delimited_u16(bytes, topic.as_bytes());
+        put_delimited_u16(bytes, topic.as_ref().as_bytes());
     }
 }
 
