@@ -303,6 +303,7 @@ fn decode_subscribe(
         let topic_filter_str =
             Topic::try_from(read_binary_data!(bytes)).map_err(DecodeError::InvalidTopic)?;
         let topic_filter = topic_filter_str
+            .as_ref()
             .parse()
             .map_err(DecodeError::InvalidTopicFilter)?;
 

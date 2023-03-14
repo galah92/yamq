@@ -68,17 +68,17 @@ impl TryFrom<Bytes> for Topic {
     }
 }
 
+impl AsRef<str> for Topic {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 impl Deref for Topic {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl From<Topic> for String {
-    fn from(val: Topic) -> Self {
-        val.deref().to_string()
     }
 }
 
@@ -144,7 +144,7 @@ impl FromStr for TopicFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::{Topic, TopicFilter, TopicParseError, MAX_TOPIC_LEN_BYTES};
+    use super::*;
 
     #[test]
     fn test_topic_filter_parse_empty_topic() {

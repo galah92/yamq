@@ -69,7 +69,7 @@ impl Broker {
             } else {
                 // [MQTT-3.3.1-5] Store retained message
                 let topic = publish.topic.clone();
-                self.retained.insert(topic, publish.clone());
+                self.retained.insert(topic.as_ref(), publish.clone());
             }
         }
     }
@@ -86,7 +86,7 @@ impl Broker {
                     (topic.topic_path.to_owned(), sub_rx.into())
                 } else {
                     let (sub_tx, sub_rx) = broadcast::channel(32);
-                    self.subscribers.insert(topic.topic_path.to_owned(), sub_tx);
+                    self.subscribers.insert(topic.topic_path.as_ref(), sub_tx);
                     (topic.topic_path.to_owned(), sub_rx.into())
                 }
             })
