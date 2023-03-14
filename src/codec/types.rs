@@ -2,23 +2,35 @@ use super::topic::{Topic, TopicFilter, TopicParseError};
 use bytes::{Bytes, BytesMut};
 use num_enum::TryFromPrimitive;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
+    #[error("invalid packet type")]
     InvalidPacketType,
+    #[error("invalid protocol version")]
     InvalidProtocolVersion,
+    #[error("invalid remaining length")]
     InvalidRemainingLength,
+    #[error("invalid utf8")]
     InvalidUtf8,
+    #[error("invalid qos")]
     InvalidQoS,
+    #[error("invalid connect reason")]
     InvalidConnectReason,
+    #[error("invalid suback reason")]
     InvalidSubscribeAckReason,
+    #[error("invalid ubsuback reason")]
     InvalidUnsubscribeAckReason,
+    #[error("invalid topic")]
     InvalidTopic(TopicParseError),
+    #[error("invalid topic filter")]
     InvalidTopicFilter(TopicParseError),
-    Io(std::io::Error),
+    #[error("io error")]
+    Io(#[from] std::io::Error),
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum EncodeError {
+    #[error("io error")]
     Io(std::io::Error),
 }
 
@@ -35,12 +47,6 @@ pub struct VariableByteInt(pub u32);
 impl VariableByteInt {
     pub fn calculate_size(&self) -> u32 {
         self.calc_size()
-    }
-}
-
-impl From<std::io::Error> for DecodeError {
-    fn from(err: std::io::Error) -> Self {
-        DecodeError::Io(err)
     }
 }
 

@@ -13,8 +13,8 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn connect(address: &str) -> Self {
-        let stream = TcpStream::connect(address).await.unwrap();
+    pub async fn connect(address: &str) -> Result<Self, ConnectError> {
+        let stream = TcpStream::connect(address).await?;
         let framed = Framed::new(stream, codec::MqttCodec);
         let (mut sender, mut receiver) = framed.split();
         let (publish_sender, publish_receiver) = mpsc::unbounded_channel();
@@ -31,13 +31,15 @@ impl Client {
             password: None,
         };
         let connect = codec::Packet::Connect(connect);
-        sender.send(connect).await.unwrap();
+        sender.send(connect).await?;
 
-        let packet = receiver.next().await.unwrap().unwrap();
-        match packet {
-            codec::Packet::Connack(connack) => {
-                assert_eq!(connack.code, codec::ConnectCode::Accepted);
+        match receiver.next().await {
+            Some(Ok(codec::Packet::Connack(connack))) => {
+                if connack.code != codec::ConnectCode::Accepted {
+                    return Err(ConnectError::Connack(connack.code));
+                }
             }
+            None => panic!("unexpected end of stream"),
             _ => panic!("unexpected packet"),
         }
 
@@ -59,57 +61,101 @@ impl Client {
             }
         });
 
-        Self {
+        Ok(Self {
             sender,
             publish_receiver,
             suback_receiver,
             unsuback_receiver,
-        }
+        })
     }
 
-    pub async fn publish(&mut self, topic: &str, payload: Bytes) {
+    pub async fn publish(&mut self, topic: &str, payload: Bytes) -> Result<(), PublishError> {
         let publish = codec::Publish {
             dup: false,
             qos: codec::QoS::AtMostOnce,
             retain: false,
-            topic: codec::Topic::try_from(topic).unwrap(),
+            topic: codec::Topic::try_from(topic)?,
             pid: None,
             payload,
         };
         let publish = codec::Packet::Publish(publish);
-        self.sender.send(publish).await.unwrap();
+        self.sender.send(publish).await?;
+
+        Ok(())
     }
 
-    pub async fn subscribe(&mut self, topic: &str) {
+    pub async fn subscribe(&mut self, topic: &str) -> Result<(), SubscribeError> {
         let subscribe = codec::Subscribe {
             pid: 1,
             subscription_topics: vec![codec::SubscriptionTopic {
-                topic_path: codec::Topic::try_from(topic).unwrap(),
+                topic_path: codec::Topic::try_from(topic)?,
                 topic_filter: codec::TopicFilter::Concrete,
                 qos: codec::QoS::AtMostOnce,
             }],
         };
         let subscribe = codec::Packet::Subscribe(subscribe);
-        self.sender.send(subscribe).await.unwrap();
+        self.sender.send(subscribe).await?;
 
-        let suback = self.suback_receiver.recv().await.unwrap();
-        assert_eq!(suback.pid, 1);
+        let suback = self.suback_receiver.recv().await;
+        suback.ok_or(SubscribeError::SubackNotReceived).map(|_| ())
     }
 
-    pub async fn unsubscribe(&mut self, topic: &str) {
+    pub async fn unsubscribe(&mut self, topic: &str) -> Result<(), UnsubscribeError> {
         let unsubscribe = codec::Unsubscribe {
             pid: 1,
-            topics: vec![codec::Topic::try_from(topic).unwrap()],
+            topics: vec![codec::Topic::try_from(topic)?],
         };
         let unsubscribe = codec::Packet::Unsubscribe(unsubscribe);
-        self.sender.send(unsubscribe).await.unwrap();
+        self.sender.send(unsubscribe).await?;
 
-        let unsuback = self.unsuback_receiver.recv().await.unwrap();
-        assert_eq!(unsuback.pid, 1);
+        let unsuback = self.unsuback_receiver.recv().await;
+        unsuback
+            .ok_or(UnsubscribeError::UnsubackNotReceived)
+            .map(|_| ())
     }
 
-    pub async fn read(&mut self) -> (codec::Topic, Bytes) {
-        let publish = self.publish_receiver.recv().await.unwrap();
-        (publish.topic, publish.payload)
+    pub async fn read(&mut self) -> Option<(codec::Topic, Bytes)> {
+        let publish = self.publish_receiver.recv().await;
+        publish.map(|publish| (publish.topic, publish.payload))
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConnectError {
+    #[error("decode error: {0}")]
+    Decode(#[from] codec::DecodeError),
+    #[error("encode error: {0}")]
+    Encode(#[from] codec::EncodeError),
+    #[error("connect error: {0}")]
+    Connect(#[from] tokio::io::Error),
+    #[error("connack error")]
+    Connack(codec::ConnectCode),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PublishError {
+    #[error("topic parse error: {0}")]
+    Decode(#[from] codec::TopicParseError),
+    #[error("encode error: {0}")]
+    Encode(#[from] codec::EncodeError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SubscribeError {
+    #[error("topic parse error: {0}")]
+    Decode(#[from] codec::TopicParseError),
+    #[error("decode error: {0}")]
+    Encode(#[from] codec::EncodeError),
+    #[error("suback not received")]
+    SubackNotReceived,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UnsubscribeError {
+    #[error("topic parse error: {0}")]
+    Decode(#[from] codec::TopicParseError),
+    #[error("decode error: {0}")]
+    Encode(#[from] codec::EncodeError),
+    #[error("unsuback not received")]
+    UnsubackNotReceived,
 }

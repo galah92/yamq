@@ -6,12 +6,17 @@ const MULTI_LEVEL_WILDCARD: char = '#';
 const SINGLE_LEVEL_WILDCARD: char = '+';
 const MAX_TOPIC_LEN_BYTES: usize = 65_535;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TopicParseError {
+    #[error("topic cannot be empty")]
     EmptyTopic,
+    #[error("topic cannot exceed 65535 bytes")]
     TopicTooLong,
+    #[error("topic cannot contain # wildcard anywhere but the last level")]
     MultilevelWildcardNotAtEnd,
+    #[error("topic must have a wildcard in a separate level")]
     InvalidWildcardLevel,
+    #[error("topic cannot contain wildcards or null characters")]
     WildcardOrNullInTopic,
 }
 
