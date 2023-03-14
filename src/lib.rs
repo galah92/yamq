@@ -17,8 +17,7 @@ mod tests {
         let address = broker.address();
         tokio::spawn(async move { broker.run().await });
 
-        let client = Client::connect(&address).await;
-        client
+        Client::connect(&address).await
     }
 
     #[tokio::test]
