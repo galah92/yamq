@@ -14,7 +14,57 @@ pub struct Broker {
     retained: TopicMatcher<codec::Publish>,
 }
 
+pub trait SubscriptionAction {
+    fn on_publish(&mut self, publish: codec::Publish);
+}
+
+struct BrokerSubscription {
+    client_tx: mpsc::Sender<ConnectionRequest>,
+}
+
+pub trait Subscription {
+    fn unsubscribe(self);
+}
+
+impl Subscription for BrokerSubscription {
+    fn unsubscribe(self) {
+        todo!()
+    }
+}
+
 impl Broker {
+    pub async fn subscription<T: SubscriptionAction + Send + 'static>(
+        &self,
+        topic_filter: codec::TopicFilter,
+        mut actor: T,
+    ) -> impl Subscription {
+        let client_tx = self.client_tx.clone();
+
+        tokio::spawn(async move {
+            let (res_tx, res_rx) = oneshot::channel();
+            let subscribe = codec::Subscribe {
+                pid: 1,
+                subscription_topics: vec![codec::SubscriptionTopic {
+                    topic_filter,
+                    qos: codec::QoS::AtLeastOnce,
+                }],
+            };
+            let req = ConnectionRequest::Subscribe(SubscribeRequest { subscribe, res_tx });
+            client_tx.send(req).await.unwrap();
+            let res = res_rx.await.unwrap();
+            let (_, mut stream) = res.into_iter().next().unwrap();
+            while let Some(packet) = stream.next().await {
+                if let Ok(codec::Packet::Publish(publish)) = packet {
+                    actor.on_publish(publish);
+                }
+            }
+        });
+
+        BrokerSubscription {
+            client_tx: self.client_tx.clone(),
+        }
+    }
+
     pub async fn new(address: &str) -> Self {
         let listener = TcpListener::bind(address).await.unwrap();
         let (client_tx, client_rx) = mpsc::channel(32);

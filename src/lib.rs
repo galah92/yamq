@@ -61,4 +61,42 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_subscription() -> Result<(), Box<dyn std::error::Error>> {
+        let address = "127.0.0.1:0";
+        let mut broker = Broker::new(address).await;
+        let address = broker.address();
+
+        struct TestSubscriptionAction {
+            cancellation_tx: Option<tokio::sync::oneshot::Sender<codec::Publish>>,
+        }
+
+        impl broker::SubscriptionAction for TestSubscriptionAction {
+            fn on_publish(&mut self, publish: codec::Publish) {
+                if let Some(cancellation_tx) = self.cancellation_tx.take() {
+                    cancellation_tx.send(publish).unwrap();
+                }
+            }
+        }
+
+        let topic_filter = codec::TopicFilter::try_from("testtopic")?;
+        let (cancellation_tx, cancellation_rx) = tokio::sync::oneshot::channel();
+        let actor = TestSubscriptionAction {
+            cancellation_tx: Some(cancellation_tx),
+        };
+        let _subscription = broker.subscription(topic_filter.clone(), actor).await;
+
+        tokio::spawn(async move { broker.run().await });
+
+        let mut client = Client::connect(&address).await?;
+        let payload = "testdata";
+        client.publish("testtopic", payload.into()).await?;
+
+        let published = cancellation_rx.await?;
+        assert_eq!(published.topic, codec::Topic::try_from(topic_filter)?);
+        assert_eq!(published.payload, payload);
+
+        Ok(())
+    }
 }
