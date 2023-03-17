@@ -12,35 +12,21 @@ pub struct Broker {
     listener: TcpListener,
     client_tx: mpsc::Sender<ConnectionRequest>,
     client_rx: mpsc::Receiver<ConnectionRequest>,
-    subscribers: TopicMatcher<broadcast::Sender<codec::Packet>>,
+    subscribers: TopicMatcher<broadcast::Sender<codec::Publish>>,
     retained: TopicMatcher<codec::Publish>,
 }
 
 #[async_trait]
-pub trait SubscriptionAction {
+pub trait SubscriptionHandler {
     async fn on_publish(&mut self, publish: codec::Publish);
 }
 
-struct BrokerSubscription {
+pub struct Publisher {
     client_tx: mpsc::Sender<ConnectionRequest>,
 }
 
-#[async_trait]
-pub trait Subscription {
-    async fn publish(&self, topic: &str, payload: Bytes) -> Result<(), PublishError>;
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PublishError {
-    #[error("topic parse error: {0}")]
-    InvalidTopic(#[from] codec::TopicParseError),
-    #[error("send error")]
-    SendError,
-}
-
-#[async_trait]
-impl Subscription for BrokerSubscription {
-    async fn publish(&self, topic: &str, payload: Bytes) -> Result<(), PublishError> {
+impl Publisher {
+    pub async fn publish(&mut self, topic: &str, payload: Bytes) -> Result<(), PublishError> {
         let publish = codec::Publish {
             dup: false,
             qos: codec::QoS::AtLeastOnce,
@@ -55,6 +41,14 @@ impl Subscription for BrokerSubscription {
             .await
             .map_err(|_| PublishError::SendError)
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PublishError {
+    #[error("topic parse error: {0}")]
+    InvalidTopic(#[from] codec::TopicParseError),
+    #[error("send error")]
+    SendError,
 }
 
 impl Broker {
@@ -74,9 +68,9 @@ impl Broker {
         self.listener.local_addr().unwrap().to_string()
     }
 
-    pub async fn subscription<T, A>(&self, topic_filter: T, mut actor: A) -> impl Subscription
+    pub async fn subscription<T, A>(&self, topic_filter: T, mut handler: A)
     where
-        A: SubscriptionAction + Send + Sync + 'static,
+        A: SubscriptionHandler + Send + Sync + 'static,
         T: TryInto<codec::TopicFilter>,
         <T as TryInto<codec::TopicFilter>>::Error: std::fmt::Debug,
     {
@@ -97,15 +91,16 @@ impl Broker {
             let res = res_rx.await.unwrap();
             let (_, mut stream) = res.into_iter().next().unwrap();
             while let Some(packet) = stream.next().await {
-                if let Ok(codec::Packet::Publish(publish)) = packet {
-                    actor.on_publish(publish).await;
+                if let Ok(publish) = packet {
+                    handler.on_publish(publish).await;
                 }
             }
         });
+    }
 
-        BrokerSubscription {
-            client_tx: self.client_tx.clone(),
-        }
+    pub fn publisher(&self) -> Publisher {
+        let client_tx = self.client_tx.clone();
+        Publisher { client_tx }
     }
 
     pub async fn run(&mut self) {
@@ -133,8 +128,7 @@ impl Broker {
     fn handle_publish(&mut self, publish: codec::Publish) {
         for (_, tx) in self.subscribers.matches(publish.topic.as_ref()) {
             use broadcast::error::SendError;
-            let publish = codec::Packet::Publish(publish.clone());
-            if let Err(SendError(err)) = tx.send(publish) {
+            if let Err(SendError(err)) = tx.send(publish.clone()) {
                 println!("{:?}", err);
             }
         }
@@ -174,9 +168,7 @@ impl Broker {
         for topic in &subscribe.subscription_topics {
             for (topic, publish) in self.retained.matches(topic.topic_filter.as_ref()) {
                 let sub_tx = self.subscribers.get(topic).unwrap();
-                sub_tx
-                    .send(codec::Packet::Publish(publish.clone()))
-                    .unwrap();
+                sub_tx.send(publish.clone()).unwrap();
             }
         }
     }
@@ -196,13 +188,13 @@ impl Broker {
 struct Connection {
     framed: Framed<TcpStream, codec::MqttCodec>,
     client_tx: mpsc::Sender<ConnectionRequest>,
-    subscription_streams: StreamMap<String, BroadcastStream<codec::Packet>>,
+    subscription_streams: StreamMap<String, BroadcastStream<codec::Publish>>,
 }
 
 #[derive(Debug)]
 struct SubscribeRequest {
     subscribe: codec::Subscribe,
-    res_tx: oneshot::Sender<Vec<(codec::TopicFilter, BroadcastStream<codec::Packet>)>>,
+    res_tx: oneshot::Sender<Vec<(codec::TopicFilter, BroadcastStream<codec::Publish>)>>,
 }
 
 #[derive(Debug)]
@@ -255,7 +247,8 @@ impl Connection {
                 Some(
                     (_, packet)
                 ) = self.subscription_streams.next() => {
-                    let packet = packet.unwrap();
+                    let publish = packet.unwrap();
+                    let packet = codec::Packet::Publish(publish);
                     self.framed.send(packet).await.unwrap();
                 }
                 packet = self.framed.next() => {

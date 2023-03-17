@@ -70,12 +70,12 @@ mod tests {
         let mut broker = Broker::new(address).await;
         let address = broker.address();
 
-        struct TestSubscriptionAction {
+        struct TestSubscriptionHandler {
             cancellation_tx: Option<tokio::sync::oneshot::Sender<codec::Publish>>,
         }
 
         #[async_trait]
-        impl broker::SubscriptionAction for TestSubscriptionAction {
+        impl broker::SubscriptionHandler for TestSubscriptionHandler {
             async fn on_publish(&mut self, publish: codec::Publish) {
                 if let Some(cancellation_tx) = self.cancellation_tx.take() {
                     cancellation_tx.send(publish).unwrap();
@@ -85,10 +85,10 @@ mod tests {
 
         let topic_filter = "testtopic";
         let (cancellation_tx, cancellation_rx) = tokio::sync::oneshot::channel();
-        let actor = TestSubscriptionAction {
+        let handler = TestSubscriptionHandler {
             cancellation_tx: Some(cancellation_tx),
         };
-        let _subscription = broker.subscription("testtopic", actor).await;
+        broker.subscription("testtopic", handler).await;
 
         tokio::spawn(async move { broker.run().await });
 
