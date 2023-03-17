@@ -88,7 +88,7 @@ mod tests {
         let handler = TestSubscriptionHandler {
             cancellation_tx: Some(cancellation_tx),
         };
-        broker.subscription("testtopic", handler).await;
+        broker.subscription("testtopic", handler).await?;
 
         tokio::spawn(async move { broker.run().await });
 

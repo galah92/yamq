@@ -26,12 +26,16 @@ pub struct Publisher {
 }
 
 impl Publisher {
-    pub async fn publish(&mut self, topic: &str, payload: Bytes) -> Result<(), PublishError> {
+    pub async fn publish<T>(&mut self, topic: T, payload: Bytes) -> Result<(), PublishError>
+    where
+        T: TryInto<codec::Topic>,
+        PublishError: From<<T as TryInto<codec::Topic>>::Error>,
+    {
         let publish = codec::Publish {
             dup: false,
             qos: codec::QoS::AtLeastOnce,
             retain: false,
-            topic: codec::Topic::try_from(topic)?,
+            topic: topic.try_into()?,
             pid: None,
             payload,
         };
@@ -47,6 +51,14 @@ impl Publisher {
 pub enum PublishError {
     #[error("topic parse error: {0}")]
     InvalidTopic(#[from] codec::TopicParseError),
+    #[error("send error")]
+    SendError,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SubscriptionError {
+    #[error("topic filter parse error: {0}")]
+    InvalidTopicFilter(#[from] codec::TopicFilterParseError),
     #[error("send error")]
     SendError,
 }
@@ -68,13 +80,17 @@ impl Broker {
         self.listener.local_addr().unwrap().to_string()
     }
 
-    pub async fn subscription<T, A>(&self, topic_filter: T, mut handler: A)
+    pub async fn subscription<T, A>(
+        &self,
+        topic_filter: T,
+        mut handler: A,
+    ) -> Result<(), SubscriptionError>
     where
         A: SubscriptionHandler + Send + Sync + 'static,
         T: TryInto<codec::TopicFilter>,
-        <T as TryInto<codec::TopicFilter>>::Error: std::fmt::Debug,
+        SubscriptionError: From<<T as TryInto<codec::TopicFilter>>::Error>,
     {
-        let topic_filter = topic_filter.try_into().unwrap();
+        let topic_filter = topic_filter.try_into()?;
         let client_tx = self.client_tx.clone();
 
         tokio::spawn(async move {
@@ -96,6 +112,8 @@ impl Broker {
                 }
             }
         });
+
+        Ok(())
     }
 
     pub fn publisher(&self) -> Publisher {
