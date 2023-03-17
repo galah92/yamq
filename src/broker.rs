@@ -58,11 +58,29 @@ impl Subscription for BrokerSubscription {
 }
 
 impl Broker {
-    pub async fn subscription<T: SubscriptionAction + Send + Sync + 'static>(
-        &self,
-        topic_filter: codec::TopicFilter,
-        mut actor: T,
-    ) -> impl Subscription {
+    pub async fn new(address: &str) -> Self {
+        let listener = TcpListener::bind(address).await.unwrap();
+        let (client_tx, client_rx) = mpsc::channel(32);
+        Self {
+            listener,
+            client_tx,
+            client_rx,
+            subscribers: TopicMatcher::new(),
+            retained: TopicMatcher::new(),
+        }
+    }
+
+    pub fn address(&self) -> String {
+        self.listener.local_addr().unwrap().to_string()
+    }
+
+    pub async fn subscription<T, A>(&self, topic_filter: T, mut actor: A) -> impl Subscription
+    where
+        A: SubscriptionAction + Send + Sync + 'static,
+        T: TryInto<codec::TopicFilter>,
+        <T as TryInto<codec::TopicFilter>>::Error: std::fmt::Debug,
+    {
+        let topic_filter = topic_filter.try_into().unwrap();
         let client_tx = self.client_tx.clone();
 
         tokio::spawn(async move {
@@ -88,22 +106,6 @@ impl Broker {
         BrokerSubscription {
             client_tx: self.client_tx.clone(),
         }
-    }
-
-    pub async fn new(address: &str) -> Self {
-        let listener = TcpListener::bind(address).await.unwrap();
-        let (client_tx, client_rx) = mpsc::channel(32);
-        Self {
-            listener,
-            client_tx,
-            client_rx,
-            subscribers: TopicMatcher::new(),
-            retained: TopicMatcher::new(),
-        }
-    }
-
-    pub fn address(&self) -> String {
-        self.listener.local_addr().unwrap().to_string()
     }
 
     pub async fn run(&mut self) {

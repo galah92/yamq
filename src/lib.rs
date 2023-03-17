@@ -83,12 +83,12 @@ mod tests {
             }
         }
 
-        let topic_filter = codec::TopicFilter::try_from("testtopic")?;
+        let topic_filter = "testtopic";
         let (cancellation_tx, cancellation_rx) = tokio::sync::oneshot::channel();
         let actor = TestSubscriptionAction {
             cancellation_tx: Some(cancellation_tx),
         };
-        let _subscription = broker.subscription(topic_filter.clone(), actor).await;
+        let _subscription = broker.subscription("testtopic", actor).await;
 
         tokio::spawn(async move { broker.run().await });
 
@@ -97,7 +97,7 @@ mod tests {
         client.publish("testtopic", payload.into()).await?;
 
         let published = cancellation_rx.await?;
-        assert_eq!(published.topic, codec::Topic::try_from(topic_filter)?);
+        assert_eq!(published.topic.as_ref(), topic_filter);
         assert_eq!(published.payload, payload);
 
         Ok(())
