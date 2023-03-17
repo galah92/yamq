@@ -1,6 +1,7 @@
 mod broker;
 mod client;
 mod codec;
+mod connection;
 mod topic;
 
 pub use broker::{Broker, Publisher, SubscriptionHandler};
