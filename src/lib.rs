@@ -3,7 +3,7 @@ mod client;
 mod codec;
 mod topic;
 
-pub use broker::Broker;
+pub use broker::{Broker, Publisher, SubscriptionHandler};
 pub use client::{Client, ConnectError};
 pub use topic::TopicMatcher;
 
@@ -68,14 +68,14 @@ mod tests {
     async fn test_subscription() -> Result<(), Box<dyn std::error::Error>> {
         let address = "127.0.0.1:0";
         let mut broker = Broker::new(address).await;
-        let address = broker.address();
+        let publisher = broker.publisher();
 
         struct TestSubscriptionHandler {
             cancellation_tx: Option<tokio::sync::oneshot::Sender<codec::Publish>>,
         }
 
         #[async_trait]
-        impl broker::SubscriptionHandler for TestSubscriptionHandler {
+        impl SubscriptionHandler for TestSubscriptionHandler {
             async fn on_publish(&mut self, publish: codec::Publish) {
                 if let Some(cancellation_tx) = self.cancellation_tx.take() {
                     cancellation_tx.send(publish).unwrap();
@@ -83,21 +83,22 @@ mod tests {
             }
         }
 
-        let topic_filter = "testtopic";
         let (cancellation_tx, cancellation_rx) = tokio::sync::oneshot::channel();
         let handler = TestSubscriptionHandler {
             cancellation_tx: Some(cancellation_tx),
         };
-        broker.subscription("testtopic", handler).await?;
+
+        let topic = "testtopic";
+        let payload = "testdata";
+
+        broker.subscription(topic, handler).await?;
 
         tokio::spawn(async move { broker.run().await });
 
-        let mut client = Client::connect(&address).await?;
-        let payload = "testdata";
-        client.publish("testtopic", payload.into()).await?;
+        publisher.publish("testtopic", payload.into()).await?;
 
         let published = cancellation_rx.await?;
-        assert_eq!(published.topic.as_ref(), topic_filter);
+        assert_eq!(published.topic.as_ref(), topic);
         assert_eq!(published.payload, payload);
 
         Ok(())

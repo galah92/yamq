@@ -21,12 +21,13 @@ pub trait SubscriptionHandler {
     async fn on_publish(&mut self, publish: codec::Publish);
 }
 
+#[derive(Debug, Clone)]
 pub struct Publisher {
     client_tx: mpsc::Sender<ConnectionRequest>,
 }
 
 impl Publisher {
-    pub async fn publish<T>(&mut self, topic: T, payload: Bytes) -> Result<(), PublishError>
+    pub async fn publish<T>(&self, topic: T, payload: Bytes) -> Result<(), PublishError>
     where
         T: TryInto<codec::Topic>,
         PublishError: From<<T as TryInto<codec::Topic>>::Error>,
