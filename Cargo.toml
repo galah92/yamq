@@ -10,6 +10,7 @@ default = ["std"]
 std = []
 
 [dependencies]
+async-trait = "0.1.66"
 bytes = "1.4.0"
 futures = "0.3.27"
 num_enum = "0.5.11"

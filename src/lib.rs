@@ -9,6 +9,8 @@ pub use topic::TopicMatcher;
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
+
     use super::*;
 
     async fn setup_broker_and_client() -> Result<Client, ConnectError> {
@@ -72,8 +74,9 @@ mod tests {
             cancellation_tx: Option<tokio::sync::oneshot::Sender<codec::Publish>>,
         }
 
+        #[async_trait]
         impl broker::SubscriptionAction for TestSubscriptionAction {
-            fn on_publish(&mut self, publish: codec::Publish) {
+            async fn on_publish(&mut self, publish: codec::Publish) {
                 if let Some(cancellation_tx) = self.cancellation_tx.take() {
                     cancellation_tx.send(publish).unwrap();
                 }

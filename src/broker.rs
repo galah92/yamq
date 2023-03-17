@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -14,26 +16,49 @@ pub struct Broker {
     retained: TopicMatcher<codec::Publish>,
 }
 
+#[async_trait]
 pub trait SubscriptionAction {
-    fn on_publish(&mut self, publish: codec::Publish);
+    async fn on_publish(&mut self, publish: codec::Publish);
 }
 
 struct BrokerSubscription {
     client_tx: mpsc::Sender<ConnectionRequest>,
 }
 
+#[async_trait]
 pub trait Subscription {
-    fn unsubscribe(self);
+    async fn publish(&self, topic: &str, payload: Bytes) -> Result<(), PublishError>;
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum PublishError {
+    #[error("topic parse error: {0}")]
+    InvalidTopic(#[from] codec::TopicParseError),
+    #[error("send error")]
+    SendError,
+}
+
+#[async_trait]
 impl Subscription for BrokerSubscription {
-    fn unsubscribe(self) {
-        todo!()
+    async fn publish(&self, topic: &str, payload: Bytes) -> Result<(), PublishError> {
+        let publish = codec::Publish {
+            dup: false,
+            qos: codec::QoS::AtLeastOnce,
+            retain: false,
+            topic: codec::Topic::try_from(topic)?,
+            pid: None,
+            payload,
+        };
+        let req = ConnectionRequest::Publish(publish);
+        self.client_tx
+            .send(req)
+            .await
+            .map_err(|_| PublishError::SendError)
     }
 }
 
 impl Broker {
-    pub async fn subscription<T: SubscriptionAction + Send + 'static>(
+    pub async fn subscription<T: SubscriptionAction + Send + Sync + 'static>(
         &self,
         topic_filter: codec::TopicFilter,
         mut actor: T,
@@ -55,7 +80,7 @@ impl Broker {
             let (_, mut stream) = res.into_iter().next().unwrap();
             while let Some(packet) = stream.next().await {
                 if let Ok(codec::Packet::Publish(publish)) = packet {
-                    actor.on_publish(publish);
+                    actor.on_publish(publish).await;
                 }
             }
         });
