@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::{SinkExt, StreamExt};
+use futures::{Future, SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::{wrappers::BroadcastStream, StreamMap};
@@ -81,7 +81,7 @@ impl Broker {
         self.listener.local_addr().unwrap().to_string()
     }
 
-    pub async fn subscription<T, A>(
+    pub fn subscription<T, A>(
         &self,
         topic_filter: T,
         mut handler: A,
@@ -110,6 +110,43 @@ impl Broker {
             while let Some(packet) = stream.next().await {
                 if let Ok(publish) = packet {
                     handler.on_publish(publish).await;
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    pub fn subscription_handler<T, F, Fut>(
+        &self,
+        topic_filter: T,
+        handler: F,
+    ) -> Result<(), SubscriptionError>
+    where
+        F: FnOnce(codec::Publish) -> Fut + Send + Copy + 'static,
+        Fut: Future<Output = ()> + Send,
+        T: TryInto<codec::TopicFilter>,
+        SubscriptionError: From<<T as TryInto<codec::TopicFilter>>::Error>,
+    {
+        let topic_filter = topic_filter.try_into()?;
+        let client_tx = self.client_tx.clone();
+
+        tokio::spawn(async move {
+            let (res_tx, res_rx) = oneshot::channel();
+            let subscribe = codec::Subscribe {
+                pid: 1,
+                subscription_topics: vec![codec::SubscriptionTopic {
+                    topic_filter,
+                    qos: codec::QoS::AtLeastOnce,
+                }],
+            };
+            let req = ConnectionRequest::Subscribe(SubscribeRequest { subscribe, res_tx });
+            client_tx.send(req).await.unwrap();
+            let res = res_rx.await.unwrap();
+            let (_, mut stream) = res.into_iter().next().unwrap();
+            while let Some(packet) = stream.next().await {
+                if let Ok(publish) = packet {
+                    handler(publish).await;
                 }
             }
         });

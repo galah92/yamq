@@ -66,8 +66,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription() -> Result<(), Box<dyn std::error::Error>> {
-        let address = "127.0.0.1:0";
-        let mut broker = Broker::new(address).await;
+        let mut broker = Broker::new("127.0.0.1:0").await;
         let publisher = broker.publisher();
 
         struct TestSubscriptionHandler {
@@ -91,7 +90,9 @@ mod tests {
         let topic = "testtopic";
         let payload = "testdata";
 
-        broker.subscription(topic, handler).await?;
+        broker.subscription(topic, handler)?;
+
+        broker.subscription_handler(topic, hello_subscriber)?;
 
         tokio::spawn(async move { broker.run().await });
 
@@ -102,5 +103,12 @@ mod tests {
         assert_eq!(published.payload, payload);
 
         Ok(())
+    }
+
+    async fn hello_subscriber(publish: codec::Publish) {
+        let topic = publish.topic.as_ref();
+        let payload = publish.payload;
+        println!("echoing message {topic:?} {payload:?}");
+        // publisher.publish(topic, payload).await;  // TODO: support this
     }
 }
