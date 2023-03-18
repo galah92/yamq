@@ -16,7 +16,7 @@ mod tests {
 
     async fn setup_broker_and_client() -> Result<Client, ConnectError> {
         let address = "127.0.0.1:0";
-        let broker = Broker::new(address).await;
+        let broker = Broker::bind(address).await;
         let address = broker.address();
 
         Client::connect(&address).await
@@ -66,7 +66,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription() -> Result<(), Box<dyn std::error::Error>> {
-        let broker = Broker::new("127.0.0.1:0").await;
+        let broker = Broker::bind("127.0.0.1:0").await;
         let publisher = broker.publisher();
 
         let topic = "testtopic";

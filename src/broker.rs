@@ -52,7 +52,7 @@ pub enum SubscriptionError {
 }
 
 impl Broker {
-    pub async fn new(address: &str) -> Self {
+    pub async fn bind(address: &str) -> Self {
         let listener = TcpListener::bind(address).await.unwrap();
         let local_addr = listener.local_addr().unwrap();
         let (client_tx, client_rx) = mpsc::channel(32);

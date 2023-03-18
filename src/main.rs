@@ -1,9 +1,9 @@
-use yamq::Broker;
 use tokio_stream::StreamExt;
+use yamq::Broker;
 
 #[tokio::main]
 async fn main() {
-    let broker = Broker::new("127.0.0.1:1883").await;
+    let broker = Broker::bind("127.0.0.1:1883").await;
     println!("Listening on {}", broker.address());
 
     let mut subscriber = broker.subscription("#").await.unwrap();
