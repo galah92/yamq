@@ -162,7 +162,7 @@ impl BrokerState {
             } else {
                 // [MQTT-3.3.1-5] Store retained message
                 let topic = publish.topic.clone();
-                self.retained.insert(topic.as_ref(), publish.clone());
+                self.retained.insert(topic.as_ref(), publish);
             }
         }
     }

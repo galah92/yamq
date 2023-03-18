@@ -121,6 +121,11 @@ impl Connection {
             }
             codec::Packet::Subscribe(subscribe) => {
                 let topics = &subscribe.subscription_topics;
+                let return_codes = topics
+                    .iter()
+                    .map(|_| codec::SubscribeAckReason::GrantedQoSOne)
+                    .collect();
+                let pid = subscribe.pid;
 
                 if topics.is_empty() {
                     // [MQTT-3.8.3-3] Invalid subscribe packet, disconnect the client
@@ -130,7 +135,7 @@ impl Connection {
                 // Send to broker
                 let (req_tx, req_rx) = oneshot::channel();
                 let subscribe_req = SubscribeRequest {
-                    subscribe: subscribe.clone(),
+                    subscribe,
                     res_tx: req_tx,
                 };
                 let req = ConnectionRequest::Subscribe(subscribe_req);
@@ -143,11 +148,6 @@ impl Connection {
                 }
 
                 // Send suback
-                let pid = subscribe.pid;
-                let return_codes = topics
-                    .iter()
-                    .map(|_| codec::SubscribeAckReason::GrantedQoSOne)
-                    .collect();
                 let suback = codec::Suback { pid, return_codes };
                 let suback = codec::Packet::Suback(suback);
                 self.framed.send(suback).await.unwrap();
