@@ -2,12 +2,10 @@
 name = "yamq"
 version = "0.1.0"
 edition = "2021"
+description = "Yet Another MQTT implementation"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[features]
-default = ["std"]
-std = []
 
 [dependencies]
 bytes = "1.4.0"
