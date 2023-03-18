@@ -7,9 +7,9 @@ use crate::codec;
 
 pub struct Client {
     sender: SplitSink<Framed<TcpStream, codec::MqttCodec>, codec::Packet>,
-    publish_receiver: mpsc::UnboundedReceiver<codec::Publish>,
-    suback_receiver: mpsc::UnboundedReceiver<codec::Suback>,
-    unsuback_receiver: mpsc::UnboundedReceiver<codec::Unsuback>,
+    publish_receiver: mpsc::Receiver<codec::Publish>,
+    suback_receiver: mpsc::Receiver<codec::Suback>,
+    unsuback_receiver: mpsc::Receiver<codec::Unsuback>,
 }
 
 impl Client {
@@ -17,9 +17,9 @@ impl Client {
         let stream = TcpStream::connect(address).await?;
         let framed = Framed::new(stream, codec::MqttCodec);
         let (mut sender, mut receiver) = framed.split();
-        let (publish_sender, publish_receiver) = mpsc::unbounded_channel();
-        let (suback_sender, suback_receiver) = mpsc::unbounded_channel();
-        let (unsuback_sender, unsuback_receiver) = mpsc::unbounded_channel();
+        let (publish_sender, publish_receiver) = mpsc::channel(32);
+        let (suback_sender, suback_receiver) = mpsc::channel(32);
+        let (unsuback_sender, unsuback_receiver) = mpsc::channel(32);
 
         let connect = codec::Connect {
             protocol: codec::Protocol::V311,
@@ -48,13 +48,13 @@ impl Client {
                 let packet = packet.unwrap();
                 match packet {
                     codec::Packet::Publish(publish) => {
-                        publish_sender.send(publish).unwrap();
+                        publish_sender.send(publish).await.unwrap();
                     }
                     codec::Packet::Suback(suback) => {
-                        suback_sender.send(suback).unwrap();
+                        suback_sender.send(suback).await.unwrap();
                     }
                     codec::Packet::Unsuback(unsuback) => {
-                        unsuback_sender.send(unsuback).unwrap();
+                        unsuback_sender.send(unsuback).await.unwrap();
                     }
                     _ => {}
                 }

@@ -10,14 +10,6 @@ pub struct Broker {
     local_addr: std::net::SocketAddr,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum SubscriptionError {
-    #[error("topic filter parse error: {0}")]
-    InvalidTopicFilter(#[from] codec::TopicFilterParseError),
-    #[error("send error")]
-    SendError,
-}
-
 #[derive(Debug, Clone)]
 pub struct Publisher {
     client_tx: mpsc::Sender<ConnectionRequest>,
@@ -51,6 +43,12 @@ pub enum PublishError {
     InvalidTopic(#[from] codec::TopicParseError),
     #[error("send error")]
     SendError,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SubscriptionError {
+    #[error("topic filter parse error: {0}")]
+    InvalidTopicFilter(#[from] codec::TopicFilterParseError),
 }
 
 impl Broker {
