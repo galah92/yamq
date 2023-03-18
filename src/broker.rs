@@ -1,23 +1,13 @@
 use super::connection::{Connection, ConnectionRequest, SubscribeRequest};
 use super::{codec, TopicMatcher};
-use async_trait::async_trait;
 use bytes::Bytes;
-use futures::Future;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio_stream::StreamExt;
+use tokio_stream::wrappers::BroadcastStream;
 
 pub struct Broker {
-    listener: TcpListener,
     client_tx: mpsc::Sender<ConnectionRequest>,
-    client_rx: mpsc::Receiver<ConnectionRequest>,
-    subscribers: TopicMatcher<broadcast::Sender<codec::Publish>>,
-    retained: TopicMatcher<codec::Publish>,
-}
-
-#[async_trait]
-pub trait SubscriptionHandler {
-    async fn on_publish(&mut self, publish: codec::Publish);
+    local_addr: std::net::SocketAddr,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -66,7 +56,68 @@ pub enum PublishError {
 impl Broker {
     pub async fn new(address: &str) -> Self {
         let listener = TcpListener::bind(address).await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
         let (client_tx, client_rx) = mpsc::channel(32);
+        let mut broker_state = BrokerState::new(listener, client_tx.clone(), client_rx).await;
+        tokio::spawn(async move {
+            broker_state.run().await;
+        });
+        Self {
+            client_tx,
+            local_addr,
+        }
+    }
+
+    pub fn address(&self) -> String {
+        self.local_addr.to_string()
+    }
+
+    pub async fn subscription<T>(
+        &self,
+        topic_filter: T,
+    ) -> Result<BroadcastStream<codec::Publish>, SubscriptionError>
+    where
+        T: TryInto<codec::TopicFilter>,
+        SubscriptionError: From<<T as TryInto<codec::TopicFilter>>::Error>,
+    {
+        let topic_filter = topic_filter.try_into()?;
+        let client_tx = self.client_tx.clone();
+
+        let (res_tx, res_rx) = oneshot::channel();
+        let subscribe = codec::Subscribe {
+            pid: 1,
+            subscription_topics: vec![codec::SubscriptionTopic {
+                topic_filter,
+                qos: codec::QoS::AtLeastOnce,
+            }],
+        };
+        let req = ConnectionRequest::Subscribe(SubscribeRequest { subscribe, res_tx });
+        client_tx.send(req).await.unwrap();
+        let res = res_rx.await.unwrap();
+        let (_, stream) = res.into_iter().next().unwrap();
+        Ok(stream)
+    }
+
+    pub fn publisher(&self) -> Publisher {
+        let client_tx = self.client_tx.clone();
+        Publisher { client_tx }
+    }
+}
+
+struct BrokerState {
+    listener: TcpListener,
+    client_tx: mpsc::Sender<ConnectionRequest>,
+    client_rx: mpsc::Receiver<ConnectionRequest>,
+    subscribers: TopicMatcher<broadcast::Sender<codec::Publish>>,
+    retained: TopicMatcher<codec::Publish>,
+}
+
+impl BrokerState {
+    async fn new(
+        listener: TcpListener,
+        client_tx: mpsc::Sender<ConnectionRequest>,
+        client_rx: mpsc::Receiver<ConnectionRequest>,
+    ) -> Self {
         Self {
             listener,
             client_tx,
@@ -74,88 +125,6 @@ impl Broker {
             subscribers: TopicMatcher::new(),
             retained: TopicMatcher::new(),
         }
-    }
-
-    pub fn address(&self) -> String {
-        self.listener.local_addr().unwrap().to_string()
-    }
-
-    pub fn subscription<T, A>(
-        &self,
-        topic_filter: T,
-        mut handler: A,
-    ) -> Result<(), SubscriptionError>
-    where
-        A: SubscriptionHandler + Send + Sync + 'static,
-        T: TryInto<codec::TopicFilter>,
-        SubscriptionError: From<<T as TryInto<codec::TopicFilter>>::Error>,
-    {
-        let topic_filter = topic_filter.try_into()?;
-        let client_tx = self.client_tx.clone();
-
-        tokio::spawn(async move {
-            let (res_tx, res_rx) = oneshot::channel();
-            let subscribe = codec::Subscribe {
-                pid: 1,
-                subscription_topics: vec![codec::SubscriptionTopic {
-                    topic_filter,
-                    qos: codec::QoS::AtLeastOnce,
-                }],
-            };
-            let req = ConnectionRequest::Subscribe(SubscribeRequest { subscribe, res_tx });
-            client_tx.send(req).await.unwrap();
-            let res = res_rx.await.unwrap();
-            let (_, mut stream) = res.into_iter().next().unwrap();
-            while let Some(packet) = stream.next().await {
-                if let Ok(publish) = packet {
-                    handler.on_publish(publish).await;
-                }
-            }
-        });
-
-        Ok(())
-    }
-
-    pub fn subscription_handler<T, F, Fut>(
-        &self,
-        topic_filter: T,
-        handler: F,
-    ) -> Result<(), SubscriptionError>
-    where
-        F: FnOnce(codec::Publish) -> Fut + Send + Copy + 'static,
-        Fut: Future<Output = ()> + Send,
-        T: TryInto<codec::TopicFilter>,
-        SubscriptionError: From<<T as TryInto<codec::TopicFilter>>::Error>,
-    {
-        let topic_filter = topic_filter.try_into()?;
-        let client_tx = self.client_tx.clone();
-
-        tokio::spawn(async move {
-            let (res_tx, res_rx) = oneshot::channel();
-            let subscribe = codec::Subscribe {
-                pid: 1,
-                subscription_topics: vec![codec::SubscriptionTopic {
-                    topic_filter,
-                    qos: codec::QoS::AtLeastOnce,
-                }],
-            };
-            let req = ConnectionRequest::Subscribe(SubscribeRequest { subscribe, res_tx });
-            client_tx.send(req).await.unwrap();
-            let res = res_rx.await.unwrap();
-            let (_, mut stream) = res.into_iter().next().unwrap();
-            while let Some(packet) = stream.next().await {
-                if let Ok(publish) = packet {
-                    handler(publish).await;
-                }
-            }
-        });
-
-        Ok(())
-    }
-
-    pub fn publisher(&self) -> Publisher {
-        let client_tx = self.client_tx.clone();
-        Publisher { client_tx }
     }
 
     pub async fn run(&mut self) {
