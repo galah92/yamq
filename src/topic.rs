@@ -45,10 +45,7 @@ impl<T> TopicMatcher<T> {
                 "#" => node.pound_wild.as_deref_mut(),
                 sym => node.children.get_mut(sym),
             };
-            node = match node_opt {
-                Some(node) => node,
-                None => return None,
-            };
+            node = node_opt?;
         }
         node.content.take().map(|(_, v)| v)
     }
@@ -63,10 +60,7 @@ impl<T> TopicMatcher<T> {
                 "#" => node.pound_wild.as_deref(),
                 sym => node.children.get(sym),
             };
-            node = match node_opt {
-                Some(node) => node,
-                None => return None,
-            };
+            node = node_opt?;
         }
         node.content.as_ref().map(|(_, v)| v)
     }
@@ -81,10 +75,7 @@ impl<T> TopicMatcher<T> {
                 "#" => node.pound_wild.as_deref_mut(),
                 sym => node.children.get_mut(sym),
             };
-            node = match node_opt {
-                Some(node) => node,
-                None => return None,
-            };
+            node = node_opt?;
         }
         node.content.as_mut().map(|(_, v)| v)
     }
@@ -197,15 +188,12 @@ impl<'a, 'b, T> MatchIter<'a, 'b, T> {
     }
 }
 
-impl<'a, 'b, T> Iterator for MatchIter<'a, 'b, T> {
+impl<'a, T> Iterator for MatchIter<'a, 'a, T> {
     type Item = &'a (String, T);
 
     /// Gets the next value from a key filter that matches the iterator's topic.
     fn next(&mut self) -> Option<Self::Item> {
-        let (node, mut syms) = match self.nodes.pop() {
-            Some(val) => val,
-            None => return None,
-        };
+        let (node, mut syms) = self.nodes.pop()?;
 
         let sym = match syms.pop() {
             Some(sym) => sym,
@@ -242,14 +230,11 @@ impl<'a, 'b, T> MatchIterMut<'a, 'b, T> {
     }
 }
 
-impl<'a, 'b, T> Iterator for MatchIterMut<'a, 'b, T> {
+impl<'a, T> Iterator for MatchIterMut<'a, 'a, T> {
     type Item = (&'a String, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (node, mut syms) = match self.nodes.pop() {
-            Some(val) => val,
-            None => return None,
-        };
+        let (node, mut syms) = self.nodes.pop()?;
 
         let sym = match syms.pop() {
             Some(sym) => sym,

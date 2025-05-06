@@ -132,7 +132,7 @@ impl TryFrom<String> for TopicFilter {
 
         for level in filter.split(TOPIC_SEPARATOR) {
             let level_contains_wildcard =
-                level.contains(|x: char| x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD);
+                level.contains([SINGLE_LEVEL_WILDCARD, MULTI_LEVEL_WILDCARD]);
             if level_contains_wildcard {
                 // Any wildcards on a particular level must be specified on their own
                 if level.len() > 1 {
@@ -189,7 +189,7 @@ impl TopicFilter {
 
     pub fn is_wildcard(&self) -> bool {
         self.0
-            .contains(|x: char| x == SINGLE_LEVEL_WILDCARD || x == MULTI_LEVEL_WILDCARD)
+            .contains([SINGLE_LEVEL_WILDCARD, MULTI_LEVEL_WILDCARD])
     }
 }
 
