@@ -1,5 +1,5 @@
 use super::topic::{Topic, TopicFilter, TopicFilterParseError, TopicParseError};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use num_enum::TryFromPrimitive;
 
 #[derive(Debug, thiserror::Error)]
@@ -58,18 +58,6 @@ impl From<std::io::Error> for EncodeError {
 
 trait PacketSize {
     fn calc_size(&self) -> u32;
-}
-
-trait Encode {
-    fn encode(&self, bytes: &mut BytesMut);
-}
-
-impl<T: Encode> Encode for Option<T> {
-    fn encode(&self, bytes: &mut BytesMut) {
-        if let Some(data) = self {
-            data.encode(bytes);
-        }
-    }
 }
 
 impl PacketSize for u16 {
