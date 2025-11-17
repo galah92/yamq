@@ -10,8 +10,8 @@ license = "MIT"
 [dependencies]
 bytes = "1.10.1"
 futures = "0.3.31"
-num_enum = "0.7.3"
-thiserror = "2.0.12"
-tokio = { version = "1.45.0", features = ["macros", "rt", "rt-multi-thread", "time", "net", "full"] }
+num_enum = "0.7.4"
+thiserror = "2.0.15"
+tokio = { version = "1.47.1", features = ["macros", "rt", "rt-multi-thread", "time", "net", "full"] }
 tokio-stream = { version = "0.1.17", features = ["sync"] }
-tokio-util = { version = "0.7.15", features = ["codec"] }
+tokio-util = { version = "0.7.16", features = ["codec"] }
