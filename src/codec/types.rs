@@ -158,6 +158,7 @@ pub enum QoS {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, TryFromPrimitive)]
+#[allow(dead_code)]
 pub enum RetainHandling {
     SendAtSubscribeTime = 0,
     SendAtSubscribeTimeIfNonexistent = 1,
@@ -212,6 +213,7 @@ pub enum UnsubscribeAckReason {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
+#[allow(dead_code)]
 pub enum DisconnectReason {
     NormalDisconnection = 0,
     DisconnectWithWillMessage = 4,
