@@ -11,7 +11,7 @@ license = "MIT"
 bytes = "1.11.0"
 futures = "0.3.31"
 num_enum = "0.7.5"
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["macros", "rt", "rt-multi-thread", "time", "net", "full"] }
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 tokio-util = { version = "0.7.18", features = ["codec"] }
